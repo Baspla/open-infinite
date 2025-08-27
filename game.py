@@ -1,13 +1,14 @@
 import atexit
 import logging
+import json
 
 from cache import Cache
 from gamemodes.classic import ClassicGamemode
-from gamemodes.gamemode import BasicGamemode
-from templates import username, ask_llm
+from templates import username
 import os
 import httpx
 import regex
+import asyncio
 
 log = logging.getLogger('GameController')
 CACHE_FILE = 'cache/cache.json'
@@ -168,41 +169,69 @@ class GameController:
         payload = {
             "model": ollama_model,
             "system": system_prompt,
-            "prompt": user_prompt
+            "prompt": user_prompt,
+            "stream": False,
         }
+
+        log.debug(f"Payload {payload}")
 
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(f"{ollama_url}/api/generate", json=payload)
-                if response.status_code == 200:
-                    try:
-                        result = response.json()
-                    except Exception as e:
-                        log.error(f"Response is not valid JSON: {e}")
-                        await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
-                        return
 
-                    name = result.get("name")
-                    emoji = result.get("emoji")
+            # --- Check HTTP response ---
+            if response.status_code != 200:
+                log.error(f"Ollama request failed: {response.status_code} {response.text}")
+                return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
 
-                    def is_single_emoji(s):
-                        # Checks for a single grapheme cluster (emoji)
-                        return isinstance(s, str) and regex.fullmatch(r"\X", s) and len(s) <= 3
+            # --- Try parsing JSON ---
+            try:
+                responseobj = response.json()
+            except Exception as e:
+                log.error(f"Response is not valid JSON: {e}, body: {response.text[:200]!r}")
+                return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
 
-                    if (
-                        isinstance(name, str) and 1 <= len(name) <= 40 and
-                        is_single_emoji(emoji)
-                    ):
-                        self.cache_combo(item1, item2, name, emoji)
-                        await self.gamemode.handle_combo(uuid, pair_id, item1, item2, result, False)
-                    else:
-                        log.error(f"Malformed result from Ollama: {result}")
-                        await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
-                    return
-                else:
-                    log.error(f"Ollama request failed: {response.status_code} {response.text}")
-                    await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
+            # --- Validate result ---
+            if not isinstance(responseobj, dict):
+                log.error(f"Unexpected JSON structure: {responseobj}")
+                return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
+
+            responseobj.get("response")
+            if not isinstance(responseobj.get("response"), str):
+                log.error(f"Missing or invalid 'response' field: {responseobj}")
+                return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
+
+            # response from the llm maybe look like ```json\n{\n"name": "Steam",\n"emoji": "💨"\n}\n``` or just like {"name": "Steam", "emoji": "💨"} handle both cases
+            llm_response = responseobj.get("response").strip()
+            if llm_response.startswith("```") and llm_response.endswith("```"):
+                llm_response = llm_response[llm_response.find('\n')+1:llm_response.rfind('```')].strip()
+            try:
+                result = json.loads(llm_response)
+            except Exception as e:
+                log.error(f"Response 'response' field is not valid JSON: {e}, body: {llm_response!r}")
+                return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
+
+            if not isinstance(result, dict):
+                log.error(f"Response 'response' field is not a JSON object: {result}")
+                return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
+
+            name = result.get("name")
+            emoji = result.get("emoji")
+
+            log.debug(f"Ollama returned: name={name!r}, emoji={emoji!r}")
+
+            def is_single_emoji(s: str) -> bool:
+                # Grapheme cluster check
+                return isinstance(s, str) and regex.fullmatch(r"\X", s) and len(s) <= 3
+
+            if isinstance(name, str) and 1 <= len(name) <= 40 and is_single_emoji(emoji):
+                self.cache_combo(item1, item2, name, emoji)
+                await self.gamemode.handle_combo(uuid, pair_id, item1, item2, result, False)
+            else:
+                log.error(f"Malformed result from Ollama: {result}")
+                await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
+
         except httpx.RequestError as e:
-            log.error(f"Error requesting Ollama: {e}")
-            await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
-        pass
+            log.error(f"Network error requesting Ollama: {e}")
+        await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
+        return None
