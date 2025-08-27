@@ -202,5 +202,7 @@ class GameController:
                 else:
                     log.error(f"Ollama request failed: {response.status_code} {response.text}")
                     await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
-        except Exception as e:
+        except httpx.RequestError as e:
             log.error(f"Error requesting Ollama: {e}")
+            await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
+        pass
