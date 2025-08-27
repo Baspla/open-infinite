@@ -5,6 +5,7 @@ import json
 from cache import Cache
 from gamemodes.classic import ClassicGamemode
 from gamemodes.shared import SharedGamemode
+from gamemodes.gamemode import BasicGamemode
 from templates import username
 import os
 import httpx
@@ -19,7 +20,16 @@ class GameController:
     
     def __init__(self):
         self.players = {}
-        self.gamemode = SharedGamemode(self)
+        env_gamemode = os.getenv('GAME_MODE', 'classic').lower()
+        if env_gamemode == 'classic':
+            log.info('Starting in Classic Gamemode')
+            self.gamemode = ClassicGamemode(self)
+        elif env_gamemode == 'shared':
+            log.info('Starting in Shared Gamemode')
+            self.gamemode = SharedGamemode(self)
+        else:
+            log.info('Unknown GAME_MODE ' + env_gamemode + ', starting in Default Gamemode')
+            self.gamemode = BasicGamemode(self)
         self.cache = Cache()
         
         log.info('Loading cache')
