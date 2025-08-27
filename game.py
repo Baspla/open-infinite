@@ -133,7 +133,7 @@ class GameController:
     async def ask_llm(self, uuid, pair_id, item1, item2):
         log.info('Asking LLM for combo of ' + item1 + ' and ' + item2)
         ollama_url = os.getenv("OLLAMA_API_URL")
-        ollama_model = os.getenv("OLLAMA_MODEL") or "gemma3:12b"
+        ollama_model = os.getenv("OLLAMA_MODEL") or "gemma3:1b"
 
         if not ollama_url:
             log.error("OLLAMA_API_URL environment variable not set")
@@ -177,7 +177,7 @@ class GameController:
 
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.post(f"{ollama_url}/api/generate", json=payload)
+                response = await client.post(f"{ollama_url}/api/generate", json=payload, timeout=30.0)
 
             # --- Check HTTP response ---
             if response.status_code != 200:
@@ -235,3 +235,13 @@ class GameController:
             log.error(f"Network error requesting Ollama: {e}")
         await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
         return None
+
+
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
+    gc = GameController()
+    log.info("Testing LLM with Water + Fire")
+    asyncio.run(gc.ask_llm(0,0, "Water", "Fire"))
+    log.info("Testing done")
