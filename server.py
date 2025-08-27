@@ -59,5 +59,6 @@ def start_server(_game_controller):
     game_controller = _game_controller
     app = web.Application()
     app.router.add_get('/client', client_handler)
-    web.run_app(app, port=12345)
+    port = os.getenv('PORT', '8080')
+    web.run_app(app, port=int(port))
     logging.getLogger('aiohttp.web').setLevel(logging.WARNING)
