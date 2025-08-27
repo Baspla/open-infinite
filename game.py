@@ -122,10 +122,18 @@ class GameController:
             await self.ask_llm(uuid, pair_id, item1, item2)
     
     def get_cached_combo(self, item1, item2):
-        return self.cache.get(item1 + item2)
-    
+        escaped_item1 = item1.replace("'", "\\'")
+        escaped_item2 = item2.replace("'", "\\'")
+        key = f"('{escaped_item1}', '{escaped_item2}')"
+        return self.cache.get(key)
+
     def cache_combo(self, item1, item2, result_name, result_emoji):
-        self.cache.addPair(item1 + item2, result_name)
+        if item1 > item2:
+            item1, item2 = item2, item1
+        escaped_item1 = item1.replace("'", "\\'")
+        escaped_item2 = item2.replace("'", "\\'")
+        key = f"('{escaped_item1}', '{escaped_item2}')"
+        self.cache.addPair(key, result_name)
         self.cache.addItem(result_name, result_emoji)
         self.save_cache()
         pass
@@ -226,14 +234,14 @@ class GameController:
 
             if isinstance(name, str) and 1 <= len(name) <= 40 and is_single_emoji(emoji):
                 self.cache_combo(item1, item2, name, emoji)
-                await self.gamemode.handle_combo(uuid, pair_id, item1, item2, result, False)
+                return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, result, False)
             else:
                 log.error(f"Malformed result from Ollama: {result}")
-                await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
+                return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
 
         except httpx.RequestError as e:
             log.error(f"Network error requesting Ollama: {e}")
-        await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
+        return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
         return None
 
 
