@@ -95,7 +95,7 @@ class GameController:
         pass
     
     def get_pass(self):
-        return 'BANGER'
+        return os.getenv('GAME_PASS', 'secret_password')
     
     async def set_gamemode(self, _gamemode):
         if self.gamemode:

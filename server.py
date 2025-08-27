@@ -11,8 +11,6 @@ log = logging.getLogger('webserver')
 
 game_controller: GameController
 
-CONTROLLER_PASS = os.environ.get('CONTROLLER_PASS') or 'defaultPassword123'
-
 
 async def client_handler(request):
     global game_controller
