@@ -10,7 +10,7 @@ import httpx
 import regex
 
 log = logging.getLogger('GameController')
-CACHE_FILE = 'cache.json'
+CACHE_FILE = 'cache/cache.json'
 
 
 class GameController:
