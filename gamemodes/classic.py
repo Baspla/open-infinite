@@ -1,5 +1,4 @@
 import logging
-from statistics import mode
 from gamemodes.gamemode import BasicGamemode
 from templates import gamemode, item, item_list, pair_result, username, clear, news, pair_empty_result
 

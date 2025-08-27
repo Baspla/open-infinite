@@ -4,6 +4,7 @@ import json
 
 from cache import Cache
 from gamemodes.classic import ClassicGamemode
+from gamemodes.shared import SharedGamemode
 from templates import username
 import os
 import httpx
@@ -18,7 +19,7 @@ class GameController:
     
     def __init__(self):
         self.players = {}
-        self.gamemode = ClassicGamemode(self)
+        self.gamemode = SharedGamemode(self)
         self.cache = Cache()
         
         log.info('Loading cache')
