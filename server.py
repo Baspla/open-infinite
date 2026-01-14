@@ -1,62 +1,151 @@
-from math import log
-import os
-import json
 import logging
+import os
+from typing import Any, Dict
+
+import socketio
 from aiohttp import web
 
 from game import GameController
-from templates import invalid_pass, release, unauthorized
+from templates import error
 
 log = logging.getLogger('webserver')
 
-game_controller: GameController
+NAMESPACE = '/game'
 
 
-async def client_handler(request):
-    global game_controller
-    ws = web.WebSocketResponse()
-    await ws.prepare(request)
+class GameNamespace(socketio.AsyncNamespace):
+    def __init__(self, controller: GameController):
+        super().__init__(NAMESPACE)
+        self.controller = controller
+        self.sid_user = {}
+        self.sid_name = {}
 
-    try:
-        async for msg in ws:
-            data = json.loads(msg.data)
-            if data is None:
-                continue
-            if ws not in client_connections:
-                log.info(request.remote + ' tries to join with Uuid: ' + data.get('uuid') + ', Name: ' + data.get(
-                    'name') + ' and Pass: ' + data.get('pass'))
-                if data.get('type') == 'join' and data.get('uuid') and data.get('name') and data.get(
-                        'pass') == game_controller.get_pass():
-                    uuid = data.get('uuid')
-                    name = data.get('name')
-                    client_connections[ws] = uuid
-                    await game_controller.handle_client_join(uuid, name, ws)
-                    continue
-                else:
-                    log.info(request.remote + ' was rejected')
-                    await ws.close()
-                    return ws
-            await game_controller.handle_client_message(client_connections[ws], data)
-            continue
+    async def on_connect(self, sid: str, environ: Dict[str, Any]):
+        user_id, display_name = self._extract_identity(environ)
+        if not user_id:
+            log.warning('Connection %s missing user id header, disconnecting', sid)
+            await self.emit('server_message', error('Missing user identity'), to=sid, namespace=self.namespace)
+            return await self.disconnect(sid)
+        self.sid_user[sid] = user_id
+        self.sid_name[sid] = display_name
+        log.info('Client connected: %s as %s (%s)', sid, user_id, display_name)
 
-    finally:
-        log.debug('Client disconnected')
-        if ws in client_connections:
-            game_controller.handle_client_disconnect(client_connections[ws])
-            del client_connections[ws]
+    async def on_join(self, sid: str, data: Dict[str, Any]):
+        log.debug('Join request from %s: %s', sid, data)
+        if not isinstance(data, dict):
+            await self.emit('server_message', error('Malformed join payload'), to=sid, namespace=self.namespace)
+            return await self.disconnect(sid)
 
-    return ws
+        uuid = self.sid_user.get(sid)
+        name = self.sid_name.get(sid)
+
+        if not uuid:
+            await self.emit('server_message', error('Missing user identity'), to=sid, namespace=self.namespace)
+            return await self.disconnect(sid)
+
+        if not name:
+            name = 'Unbekannt'
+
+        await self.controller.handle_client_join(sid, uuid, name)
+
+    async def on_pair(self, sid: str, data: Dict[str, Any]):
+        uuid = self.controller.sid_to_uuid.get(sid)
+        if not uuid:
+            return await self.emit('server_message', error('Not joined'), to=sid, namespace=self.namespace)
+
+        if not isinstance(data, dict) or 'pair' not in data or 'id' not in data:
+            return await self.emit('server_message', error('Invalid pair payload'), to=sid, namespace=self.namespace)
+
+        pair_id = data.get('id')
+        if not isinstance(pair_id, int):
+            return await self.emit('server_message', error('Invalid pair id'), to=sid, namespace=self.namespace)
+
+        pair = data.get('pair')
+        if not isinstance(pair, list) or len(pair) != 2:
+            return await self.emit('server_message', error('Pair must contain two items'), to=sid, namespace=self.namespace)
+
+        await self.controller.handle_client_pair(uuid, pair_id, pair[0], pair[1])
+
+    async def on_username(self, sid: str, data: Dict[str, Any]):
+        # Usernames are managed by OAuth2; ignore client-side rename attempts
+        return await self.emit('server_message', error('Username managed by SSO'), to=sid, namespace=self.namespace)
+
+    async def on_disconnect(self, sid: str):
+        await self.controller.handle_disconnect(sid)
+        self.sid_user.pop(sid, None)
+        self.sid_name.pop(sid, None)
+        log.info('Client disconnected: %s', sid)
+
+    def _extract_identity(self, environ: Dict[str, Any]):
+        request = environ.get('aiohttp.request')
+        if not request:
+            return '', ''
+
+        headers = request.headers
+
+        def first(*names):
+            for name in names:
+                val = headers.get(name)
+                if val:
+                    return val
+            return ''
+
+        user_id = first(
+            os.getenv('OAUTH_USER_HEADER', 'X-Auth-Request-Preferred-Username'),
+            'X-Auth-Request-Preferred-Username',
+            'X-Forwarded-Preferred-Username',
+            'X-Auth-Request-User',
+            'X-Forwarded-User',
+            'X-User',
+        )
+
+        display_name = first(
+            'X-Auth-Request-Preferred-Username',
+            'X-Forwarded-Preferred-Username',
+            'X-Auth-Request-User',
+            'X-Forwarded-User',
+            'X-User',
+            'X-Auth-Request-Email',
+            'X-Forwarded-Email',
+            'X-Email',
+        )
+
+        if not display_name:
+            display_name = user_id
+
+        return user_id, display_name
 
 
-client_connections = {}
-controller = None
+class GameServer:
+    def __init__(self):
+        self.socket_server = socketio.AsyncServer(async_mode='aiohttp', cors_allowed_origins='*')
+        self.app = web.Application()
+        self.socket_server.attach(self.app)
+        self.controller = GameController(self.socket_server, namespace=NAMESPACE)
+        self.socket_server.register_namespace(GameNamespace(self.controller))
+        self._setup_static_routes()
+
+    def _setup_static_routes(self):
+        # Serve frontend assets from the ui folder at the project root
+        static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ui')
+        if not os.path.isdir(static_dir):
+            log.warning('Static directory not found: %s', static_dir)
+            return
+
+        # Explicit index route to serve the main page
+        async def index_handler(_: web.Request):
+            return web.FileResponse(os.path.join(static_dir, 'index.html'))
+
+        self.app.router.add_get('/', index_handler)
+        # Static files (JS/CSS/assets) served from root paths
+        self.app.router.add_static('/', static_dir, show_index=False)
+
+    def run(self):
+        port = int(os.getenv('PORT', '8080'))
+        logging.getLogger('aiohttp.web').setLevel(logging.WARNING)
+        web.run_app(self.app, port=port)
 
 
-def start_server(_game_controller):
-    global game_controller
-    game_controller = _game_controller
-    app = web.Application()
-    app.router.add_get('/client', client_handler)
-    port = os.getenv('PORT', '8080')
-    web.run_app(app, port=int(port))
-    logging.getLogger('aiohttp.web').setLevel(logging.WARNING)
+def start_server():
+    server = GameServer()
+    server.run()

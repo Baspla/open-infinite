@@ -1,75 +1,79 @@
 import logging
-import random
+from templates import clear, gamemode, item, item_list, news, pair_empty_result, pair_result, username
 
-from templates import *
-
-log = logging.getLogger('BasicGamemode')
+log = logging.getLogger('AbstractGamemode')
 
 
-class BasicGamemode:
+class AbstractGamemode:
+    """Shared gamemode logic; subclasses only define item-pool strategy."""
 
-    def __init__(self,game_controller):
+    def __init__(self, game_controller, mode_name: str):
         self.game_controller = game_controller
-        pass
+        self.mode_name = mode_name
 
     async def start(self):
-        log.info('Game started')
-        # Start the game/round
-        pass
-
-    async def end(self):
-        log.info('Game ended')
-        # End the game/round and show the results
-        pass
+        log.info('%s started', self.mode_name)
+        await self._send_state_to_all()
 
     async def stop(self):
-        log.info('Game stopped')
-        # Stop the game/round
-        pass
+        log.info('%s stopped', self.mode_name)
 
     async def rejoin(self, uuid):
-        log.info(self.getName(uuid) + ' rejoined')
+        log.info('%s rejoined', self.get_player_name(uuid))
         await self.join(uuid)
 
     async def join(self, uuid):
-        log.info(self.getName(uuid) + ' joined')
-        # A player joined the game
-        await self.send(item_list([
-            item("Warten...","⏳"),
-            ]),uuid)
-        await self.send(news("+++ Bisher wurde noch kein Spielmodus ausgewählt +++ Open-Infinite nutzt JavaScript, HTML, TailwindCSS, Python, Websockets und ein Large Language Model (LLM) +++"),uuid)
-        await self.send(gamemode("Lobby-Modus"),uuid)
-        await self.send(username(self.getName(uuid)),uuid)
-        pass
+        log.info('%s joined', self.get_player_name(uuid))
+        await self._send_state(uuid)
 
-    async def pair(self, uuid,pair_id, item1, item2):
-        log.info(self.getName(uuid) + ' paired ' + item1 + ' with ' + item2)
-        items = [
-            item("Dings","😂"),
-            item("Gedöns","🤔"),
-            item("Kram","🤷"),
-            item("Zeug","🤨"),
-                 ]
-        await self.send(pair_result(pair_id,random.choice(items)),uuid)
-        pass
+    async def pair(self, uuid, pair_id, item1, item2):
+        log.info('%s paired %s with %s', self.get_player_name(uuid), item1, item2)
+        await self.game_controller.request_combo(uuid, pair_id, item1, item2)
 
-    def handle_combo(self, uuid, pair_id, item1, item2, result, cached):
+    async def handle_combo(self, uuid, pair_id, item1, item2, result, cached):
         if result is None:
-            self.send(pair_empty_result(pair_id),uuid)
-        else:
-            self.send(pair_result(pair_id,item(result.name,result.emoji),not cached),uuid)
-        pass
+            await self.send(pair_empty_result(pair_id), uuid)
+            return
 
-    def username(self, uuid, username):
-        log.info(uuid + ' changed username from '+self.getName(uuid)+' to ' + username)
-        self.game_controller.change_name(uuid, username)
+        new_item = item(result.get('name'), result.get('emoji'))
+        await self._add_item_and_notify(uuid, pair_id, new_item, cached)
 
-    async def send(self, data, uuid = None):
+    async def username(self, uuid, new_username):
+        log.info('%s changed username to %s', uuid, new_username)
+        await self.game_controller.change_username(uuid, new_username)
+
+    # --- Hooks for subclasses ---
+    def get_item_pool(self, uuid):
+        raise NotImplementedError
+
+    def add_item_to_pool(self, uuid, new_item):
+        raise NotImplementedError
+
+    async def broadcast_item_list(self, uuid):
+        await self.send(item_list(self.get_item_pool(uuid)), uuid)
+
+    # --- Internal helpers ---
+    async def _add_item_and_notify(self, uuid, pair_id, new_item, cached):
+        self.add_item_to_pool(uuid, new_item)
+        await self.send(pair_result(pair_id, new_item, not cached), uuid)
+        await self.broadcast_item_list(uuid)
+
+    async def _send_state(self, uuid):
+        await self.send(clear(), uuid)
+        await self.send(gamemode(self.mode_name), uuid)
+        await self.send(username(self.get_player_name(uuid)), uuid)
+        await self.broadcast_item_list(uuid)
+        await self.send(news(""), uuid)
+
+    async def _send_state_to_all(self):
+        for uuid in self.game_controller.players:
+            await self._send_state(uuid)
+
+    async def send(self, data, uuid=None):
         if uuid:
-            log.info('Sending to ' + self.getName(uuid) + ': ' + str(data))
             await self.game_controller.send_to_uuid(uuid, data)
         else:
             await self.game_controller.send_to_all(data)
 
-    def getName(self, uuid):
-        return self.game_controller.players[uuid]['name']
+    def get_player_name(self, uuid):
+        return self.game_controller.get_player_name(uuid) or 'Unbekannt'

@@ -1,0 +1,5 @@
+
+body, html {
+    /* Verhindert Textauswahl */
+    user-select: none;
+}

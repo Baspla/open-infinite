@@ -1,153 +1,136 @@
 import atexit
-import logging
+import asyncio
 import json
+import logging
+import os
+from dataclasses import dataclass
+from typing import Dict, Optional
+
+import httpx
+import regex
 
 from cache import Cache
 from gamemodes.classic import ClassicGamemode
+from gamemodes.gamemode import AbstractGamemode
 from gamemodes.shared import SharedGamemode
-from gamemodes.gamemode import BasicGamemode
 from templates import username
-import os
-import httpx
-import regex
-import asyncio
 
 log = logging.getLogger('GameController')
 CACHE_FILE = 'cache/cache.json'
 
 
+@dataclass
+class Player:
+    uuid: str
+    name: str
+    sid: str
+
+
 class GameController:
-    
-    def __init__(self):
-        self.players = {}
+    """Coordinates players, gamemode logic, and outbound messages."""
+
+    def __init__(self, socket_server, namespace: str = '/game'):
+        self.socket_server = socket_server
+        self.namespace = namespace
+        self.players: Dict[str, Player] = {}
+        self.sid_to_uuid: Dict[str, str] = {}
+
         env_gamemode = os.getenv('GAME_MODE', 'classic').lower()
         if env_gamemode == 'classic':
             log.info('Starting in Classic Gamemode')
-            self.gamemode = ClassicGamemode(self)
+            self.gamemode: AbstractGamemode = ClassicGamemode(self)
         elif env_gamemode == 'shared':
             log.info('Starting in Shared Gamemode')
             self.gamemode = SharedGamemode(self)
         else:
-            log.info('Unknown GAME_MODE ' + env_gamemode + ', starting in Default Gamemode')
-            self.gamemode = BasicGamemode(self)
+            log.info('Unknown GAME_MODE %s, falling back to Classic Gamemode', env_gamemode)
+            self.gamemode = ClassicGamemode(self)
+
         self.cache = Cache()
-        
         log.info('Loading cache')
         self.cache.load(CACHE_FILE)
         atexit.register(self.save_cache)
         atexit.register(self.disconnect_all)
-        pass
 
     def disconnect_all(self):
         log.info('Disconnecting all clients')
-        for player in self.players:
-            self.players[player]['ws'].close()
-        pass
+        async def _disconnect():
+            for player in list(self.players.values()):
+                await self.socket_server.disconnect(player.sid, namespace=self.namespace)
+
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_disconnect())
+        except RuntimeError:
+            asyncio.run(_disconnect())
 
     def save_cache(self):
         log.info('Saving cache')
         self.cache.save(CACHE_FILE)
     
     async def send_to_all(self, data):
-        for player in self.players:
-            log.debug('Sending to ' + player)
-            await self.players[player]['ws'].send_json(data)
-        pass
-    
-    async def send_to_uuid(self, uuid, data):
-        await self.players[uuid]['ws'].send_json(data)
-        pass
-    
-    async def handle_client_message(self, uuid, data):
-        if not data.get('type'):
-            log.error('Recieved client message without type')
+        """Broadcast a message to every connected player."""
+        log.debug('Broadcasting payload: %s', data)
+        await self.socket_server.emit('server_message', data, namespace=self.namespace)
+
+    async def send_to_uuid(self, uuid: str, data):
+        player = self.players.get(uuid)
+        if not player:
+            log.warning('Attempted to send to unknown player %s', uuid)
             return
-        
-        if data.get('type') == 'pair':
-            if data.get('pair') and data.get('id') is not None and len(data.get('pair')) == 2:
-                # pair is a array of length 2
-                item1 = data.get('pair')[0]
-                item2 = data.get('pair')[1]
-                pair_id = data.get('id')
-                await self.handle_client_pair(uuid, pair_id, item1, item2)
-            else:
-                log.error('Recieved client message with invalid pair')
-            pass
-        elif data.get('type') == 'username':
-            if data.get('username'):
-                self.handle_client_username(uuid, data.get('username'))
-            else:
-                log.error('Recieved client message with invalid username')
-            pass
-        else:
-            log.error('Recieved client message with invalid type')
-            return
-        pass
+        log.debug('Sending to %s: %s', uuid, data)
+        await self.socket_server.emit('server_message', data, namespace=self.namespace, to=player.sid)
     
-    async def handle_client_pair(self, uuid, pair_id, item1, item2):
+    async def handle_client_pair(self, uuid: str, pair_id: int, item1: str, item2: str):
         await self.gamemode.pair(uuid, pair_id, item1, item2)
-        pass
-    
-    def handle_client_username(self, uuid, username):
-        self.gamemode.username(uuid, username)
-        pass
-    
-    async def handle_client_join(self, uuid, name, ws):
-        if uuid in self.players:
-            log.info('Client with uuid ' + uuid + ' joined twice, disconnecting old connection')
-            await self.players[uuid]['ws'].close()
-            self.players[uuid] = {'name': name, 'ws': ws}
-            await self.gamemode.rejoin(uuid)
-        self.players[uuid] = {'name': name, 'ws': ws}
+
+    async def handle_client_username(self, uuid: str, new_username: str):
+        # Usernames are managed by SSO; ignore client requests
+        return
+
+    async def handle_client_join(self, sid: str, uuid: str, name: str):
+        existing_player = self.players.get(uuid)
+        if existing_player:
+            log.info('Client with uuid %s reconnected, dropping old connection', uuid)
+            await self.socket_server.disconnect(existing_player.sid, namespace=self.namespace)
+        player = Player(uuid=uuid, name=name, sid=sid)
+        self.players[uuid] = player
+        self.sid_to_uuid[sid] = uuid
         await self.gamemode.join(uuid)
-        pass
-    
-    def handle_client_disconnect(self, uuid):
-        del self.players[uuid]
-        pass
-    
-    def get_pass(self):
-        return os.getenv('GAME_PASS', 'secret_password')
-    
-    async def set_gamemode(self, _gamemode):
+
+    async def handle_disconnect(self, sid: str):
+        uuid = self.sid_to_uuid.pop(sid, None)
+        if not uuid:
+            return
+        if uuid in self.players:
+            del self.players[uuid]
+            log.info('Client %s disconnected', uuid)
+
+    async def set_gamemode(self, _gamemode: AbstractGamemode):
         if self.gamemode:
             await self.gamemode.stop()
         self.gamemode = _gamemode
         await self.gamemode.start()
-        pass
-    
-    def change_username(self, uuid, name):
-        self.players[uuid]['name'] = name
-        self.players[uuid]['ws'].send_json(username(name))
-        pass
+
+    async def change_username(self, uuid: str, name: str):
+        if uuid not in self.players:
+            log.warning('Player %s not found for username change', uuid)
+            return
+        self.players[uuid].name = name
+        await self.send_to_uuid(uuid, username(name))
+
+    def get_player_name(self, uuid: str) -> Optional[str]:
+        player = self.players.get(uuid)
+        return player.name if player else None
     
     async def request_combo(self, uuid, pair_id, item1, item2):
-        # sort item1 and item2
-        log.info('Requesting combo for ' + item1 + ' and ' + item2)
-        if item1 > item2:
-            item1, item2 = item2, item1
-        cached = self.get_cached_combo(item1, item2)
+        log.info('Requesting combo for %s and %s', item1, item2)
+        cached = self.cache.get_combo(item1, item2)
         if cached:
             await self.gamemode.handle_combo(uuid, pair_id, item1, item2, cached, True)
         else:
             await self.ask_llm(uuid, pair_id, item1, item2)
-    
-    def get_cached_combo(self, item1, item2):
-        escaped_item1 = item1.replace("'", "\\'")
-        escaped_item2 = item2.replace("'", "\\'")
-        key = f"('{escaped_item1}', '{escaped_item2}')"
-        return self.cache.get(key)
-
-    def cache_combo(self, item1, item2, result_name, result_emoji):
-        if item1 > item2:
-            item1, item2 = item2, item1
-        escaped_item1 = item1.replace("'", "\\'")
-        escaped_item2 = item2.replace("'", "\\'")
-        key = f"('{escaped_item1}', '{escaped_item2}')"
-        self.cache.addPair(key, result_name)
-        self.cache.addItem(result_name, result_emoji)
-        self.save_cache()
-        pass
+        
     
     async def ask_llm(self, uuid, pair_id, item1, item2):
         log.info('Asking LLM for combo of ' + item1 + ' and ' + item2)
@@ -221,7 +204,11 @@ class GameController:
                 return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
 
             # response from the llm maybe look like ```json\n{\n"name": "Steam",\n"emoji": "💨"\n}\n``` or just like {"name": "Steam", "emoji": "💨"} handle both cases
-            llm_response = responseobj.get("response").strip()
+            llm_response = responseobj.get("response")
+            if not isinstance(llm_response, str):
+                log.error(f"Response 'response' field is not a string: {llm_response}")
+                return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
+            llm_response = llm_response.strip()
             if llm_response.startswith("```") and llm_response.endswith("```"):
                 llm_response = llm_response[llm_response.find('\n')+1:llm_response.rfind('```')].strip()
             try:
@@ -241,10 +228,11 @@ class GameController:
 
             def is_single_emoji(s: str) -> bool:
                 # Grapheme cluster check
-                return isinstance(s, str) and regex.fullmatch(r"\X", s) and len(s) <= 3
+                return isinstance(s, str) and regex.fullmatch(r"\X", s) is not None and len(s) <= 3
 
-            if isinstance(name, str) and 1 <= len(name) <= 40 and is_single_emoji(emoji):
-                self.cache_combo(item1, item2, name, emoji)
+            if isinstance(name, str) and 1 <= len(name) <= 40 and isinstance(emoji, str) and is_single_emoji(emoji):
+                self.cache.add_combo(item1, item2, name, emoji)
+                self.save_cache()
                 return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, result, False)
             else:
                 log.error(f"Malformed result from Ollama: {result}")
@@ -253,14 +241,3 @@ class GameController:
         except httpx.RequestError as e:
             log.error(f"Network error requesting Ollama: {e}")
         return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
-        return None
-
-
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
-    gc = GameController()
-    log.info("Testing LLM with Water + Fire")
-    asyncio.run(gc.ask_llm(0,0, "Water", "Fire"))
-    log.info("Testing done")

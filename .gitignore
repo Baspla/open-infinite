@@ -1,0 +1,45 @@
+__pycache__/
+*.py[cod]
+*.pyo
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+htmlcov/
+.coverage*
+.pytest_cache/
+.mypy_cache/
+
+# Environments
+.env
+.env.*
+env/
+venv/
+.venv/
+
+# Editors/IDE
+.vscode/
+.idea/
+
+# OS noise
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Caches and logs
+cache/
+logs/
+*.log
+
+# Node / front-end (if used)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Docker
+*.pid
+*.seed
+*.pid.lock
