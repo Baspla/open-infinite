@@ -43,3 +43,7 @@ yarn-error.log*
 *.pid
 *.seed
 *.pid.lock
+
+*.csv
+*.sav
+

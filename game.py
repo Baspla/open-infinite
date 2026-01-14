@@ -16,7 +16,8 @@ from gamemodes.shared import SharedGamemode
 from templates import username
 
 log = logging.getLogger('GameController')
-CACHE_FILE = 'cache/cache.json'
+COMBO_CACHE_FILE = 'cache/combocache.json'
+ITEM_CACHE_FILE = 'cache/itemcache.json'
 
 
 @dataclass
@@ -46,9 +47,9 @@ class GameController:
             log.info('Unknown GAME_MODE %s, falling back to Classic Gamemode', env_gamemode)
             self.gamemode = ClassicGamemode(self)
 
-        self.cache = Cache()
+        self.cache = Cache(COMBO_CACHE_FILE, ITEM_CACHE_FILE)
         log.info('Loading cache')
-        self.cache.load(CACHE_FILE)
+        self.cache.load()
         atexit.register(self.save_cache)
         atexit.register(self.disconnect_all)
 
@@ -66,7 +67,7 @@ class GameController:
 
     def save_cache(self):
         log.info('Saving cache')
-        self.cache.save(CACHE_FILE)
+        self.cache.save()
     
     async def send_to_all(self, data):
         """Broadcast a message to every connected player."""
@@ -127,11 +128,111 @@ class GameController:
         log.info('Requesting combo for %s and %s', item1, item2)
         cached = self.cache.get_combo(item1, item2)
         if cached:
+            if not cached.get('emoji') and isinstance(cached.get('name'), str):
+                emoji = await self.ask_llm_for_emoji(cached['name'])
+                if emoji:
+                    cached['emoji'] = emoji
+                    self.cache.set_item_emoji(cached['name'], emoji)
+                    self.save_cache()
             await self.gamemode.handle_combo(uuid, pair_id, item1, item2, cached, True)
         else:
             await self.ask_llm(uuid, pair_id, item1, item2)
-        
     
+    
+    def _is_single_emoji(self, s: str) -> bool:
+        # Grapheme cluster check to keep single emoji outputs
+        return isinstance(s, str) and regex.fullmatch(r"\X", s) is not None and len(s) <= 3
+
+    async def ask_llm_for_emoji(self, item_name: str) -> Optional[str]:
+        log.info('Requesting emoji for %s', item_name)
+        llm_url = os.getenv("LLM_API_URL") or "https://openrouter.ai/api/v1/chat/completions"
+        llm_model = os.getenv("LLM_MODEL") or "openrouter/auto"
+        llm_key = os.getenv("LLM_KEY")
+
+        if not llm_key:
+            log.error("LLM_KEY environment variable not set")
+            return None
+        if not llm_url:
+            log.error("LLM_API_URL environment variable not set")
+            return None
+
+        system_prompt = (
+            "You pick a single emoji that best represents a given item name. "
+            "Use common, recognizable emoji only. Respond only with a JSON object containing the key 'emoji'."
+        )
+        user_prompt = (
+            f"Provide one emoji that represents '{item_name}'. "
+            "Return only a JSON object with key 'emoji' and no extra text."
+        )
+        payload = {
+            "model": llm_model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "response_format": {"type": "json_object"},
+            "stream": False,
+        }
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    llm_url,
+                    json=payload,
+                    timeout=30.0,
+                    headers={"Authorization": f"Bearer {llm_key}"},
+                )
+
+            if response.status_code != 200:
+                log.error(f"Emoji LLM request failed: {response.status_code} {response.text}")
+                return None
+
+            try:
+                responseobj = response.json()
+            except Exception as e:
+                log.error(f"Emoji response is not valid JSON: {e}, body: {response.text[:200]!r}")
+                return None
+
+            if not isinstance(responseobj, dict):
+                log.error(f"Unexpected emoji JSON structure: {responseobj}")
+                return None
+
+            choices = responseobj.get("choices")
+            if not isinstance(choices, list) or not choices:
+                log.error(f"Missing or invalid 'choices' field for emoji request: {responseobj}")
+                return None
+
+            message = choices[0].get("message") if isinstance(choices[0], dict) else None
+            llm_response = message.get("content") if isinstance(message, dict) else None
+            if not isinstance(llm_response, str):
+                log.error(f"Missing or invalid emoji message content: {responseobj}")
+                return None
+
+            llm_response = llm_response.strip()
+            if llm_response.startswith("```") and llm_response.endswith("```"):
+                llm_response = llm_response[llm_response.find('\n')+1:llm_response.rfind("```")].strip()
+
+            try:
+                result = json.loads(llm_response)
+            except Exception as e:
+                log.error(f"Emoji message content is not valid JSON: {e}, body: {llm_response!r}")
+                return None
+
+            if not isinstance(result, dict):
+                log.error(f"Emoji message content is not a JSON object: {result}")
+                return None
+
+            emoji = result.get("emoji")
+            if emoji and self._is_single_emoji(emoji):
+                log.debug(f"Emoji LLM returned {emoji!r} for {item_name!r}")
+                return emoji
+
+            log.error(f"Emoji result malformed for {item_name!r}: {result}")
+            return None
+        except httpx.RequestError as e:
+            log.error(f"Network error requesting emoji LLM: {e}")
+        return None
+
     async def ask_llm(self, uuid, pair_id, item1, item2):
         log.info('Asking LLM for combo of %s and %s', item1, item2)
         llm_url = os.getenv("LLM_API_URL") or "https://openrouter.ai/api/v1/chat/completions"
@@ -237,17 +338,16 @@ class GameController:
 
             name = result.get("name")
             emoji = result.get("emoji")
+            cached_emoji = self.cache.get_item_emoji(name) if isinstance(name, str) else None
+            final_emoji = cached_emoji or emoji
 
             log.debug(f"LLM returned: name={name!r}, emoji={emoji!r}")
 
-            def is_single_emoji(s: str) -> bool:
-                # Grapheme cluster check
-                return isinstance(s, str) and regex.fullmatch(r"\X", s) is not None and len(s) <= 3
-
-            if isinstance(name, str) and 1 <= len(name) <= 40 and isinstance(emoji, str) and is_single_emoji(emoji):
-                self.cache.add_combo(item1, item2, name, emoji)
+            if isinstance(name, str) and 1 <= len(name) <= 40 and isinstance(final_emoji, str) and self._is_single_emoji(final_emoji):
+                normalized_result = {"name": name, "emoji": final_emoji}
+                self.cache.add_combo(item1, item2, name, final_emoji)
                 self.save_cache()
-                return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, result, False)
+                return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, normalized_result, False)
             else:
                 log.error(f"Malformed result from LLM: {result}")
                 return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
