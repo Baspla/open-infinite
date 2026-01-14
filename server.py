@@ -113,8 +113,6 @@ class GameNamespace(socketio.AsyncNamespace):
         if not display_name:
             display_name = user_id
 
-        log.warning('Extracted identity: %s as %s', user_id, display_name)
-
         return user_id, display_name
 
 

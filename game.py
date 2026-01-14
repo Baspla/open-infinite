@@ -133,13 +133,17 @@ class GameController:
         
     
     async def ask_llm(self, uuid, pair_id, item1, item2):
-        log.info('Asking LLM for combo of ' + item1 + ' and ' + item2)
-        ollama_url = os.getenv("OLLAMA_API_URL")
-        ollama_model = os.getenv("OLLAMA_MODEL") or "gemma3:1b"
+        log.info('Asking LLM for combo of %s and %s', item1, item2)
+        llm_url = os.getenv("LLM_API_URL") or "https://openrouter.ai/api/v1/chat/completions"
+        llm_model = os.getenv("LLM_MODEL") or "openrouter/auto"
+        llm_key = os.getenv("LLM_KEY")
 
-        if not ollama_url:
-            log.error("OLLAMA_API_URL environment variable not set")
-            return
+        if not llm_key:
+            log.error("LLM_KEY environment variable not set")
+            return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
+        if not llm_url:
+            log.error("LLM_API_URL environment variable not set")
+            return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
 
         system_prompt = (
             "You are an expert game designer for a creative combination game inspired by 'Infinite Craft'. "
@@ -169,9 +173,12 @@ class GameController:
             "Return only a JSON object with 'name' (shorter than 30 characters) and 'emoji' (a single emoji)."
         )
         payload = {
-            "model": ollama_model,
-            "system": system_prompt,
-            "prompt": user_prompt,
+            "model": llm_model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "response_format": {"type": "json_object"},
             "stream": False,
         }
 
@@ -179,11 +186,16 @@ class GameController:
 
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.post(f"{ollama_url}/api/generate", json=payload, timeout=30.0)
+                response = await client.post(
+                    llm_url,
+                    json=payload,
+                    timeout=30.0,
+                    headers={"Authorization": f"Bearer {llm_key}"},
+                )
 
             # --- Check HTTP response ---
             if response.status_code != 200:
-                log.error(f"Ollama request failed: {response.status_code} {response.text}")
+                log.error(f"LLM request failed: {response.status_code} {response.text}")
                 return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
 
             # --- Try parsing JSON ---
@@ -198,33 +210,35 @@ class GameController:
                 log.error(f"Unexpected JSON structure: {responseobj}")
                 return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
 
-            responseobj.get("response")
-            if not isinstance(responseobj.get("response"), str):
-                log.error(f"Missing or invalid 'response' field: {responseobj}")
+            choices = responseobj.get("choices")
+            if not isinstance(choices, list) or not choices:
+                log.error(f"Missing or invalid 'choices' field: {responseobj}")
                 return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
 
-            # response from the llm maybe look like ```json\n{\n"name": "Steam",\n"emoji": "💨"\n}\n``` or just like {"name": "Steam", "emoji": "💨"} handle both cases
-            llm_response = responseobj.get("response")
+            message = choices[0].get("message") if isinstance(choices[0], dict) else None
+            llm_response = message.get("content") if isinstance(message, dict) else None
             if not isinstance(llm_response, str):
-                log.error(f"Response 'response' field is not a string: {llm_response}")
+                log.error(f"Missing or invalid message content: {responseobj}")
                 return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
+
+            # Response may be wrapped in fenced code blocks
             llm_response = llm_response.strip()
             if llm_response.startswith("```") and llm_response.endswith("```"):
                 llm_response = llm_response[llm_response.find('\n')+1:llm_response.rfind('```')].strip()
             try:
                 result = json.loads(llm_response)
             except Exception as e:
-                log.error(f"Response 'response' field is not valid JSON: {e}, body: {llm_response!r}")
+                log.error(f"LLM message content is not valid JSON: {e}, body: {llm_response!r}")
                 return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
 
             if not isinstance(result, dict):
-                log.error(f"Response 'response' field is not a JSON object: {result}")
+                log.error(f"LLM message content is not a JSON object: {result}")
                 return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
 
             name = result.get("name")
             emoji = result.get("emoji")
 
-            log.debug(f"Ollama returned: name={name!r}, emoji={emoji!r}")
+            log.debug(f"LLM returned: name={name!r}, emoji={emoji!r}")
 
             def is_single_emoji(s: str) -> bool:
                 # Grapheme cluster check
@@ -235,9 +249,9 @@ class GameController:
                 self.save_cache()
                 return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, result, False)
             else:
-                log.error(f"Malformed result from Ollama: {result}")
+                log.error(f"Malformed result from LLM: {result}")
                 return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
 
         except httpx.RequestError as e:
-            log.error(f"Network error requesting Ollama: {e}")
+            log.error(f"Network error requesting LLM: {e}")
         return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
