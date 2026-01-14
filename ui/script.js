@@ -129,7 +129,7 @@ function connectToServer(name){
     setConnStatus(1);
 
     const serverUrl = getServerUrl();
-    socket = io(serverUrl, {
+    socket = io(`${serverUrl}/game`, {
         path: '/socket.io',
         transports: ['websocket'],
         reconnectionAttempts: 10,

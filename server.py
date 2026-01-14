@@ -4,6 +4,7 @@ from typing import Any, Dict
 
 import socketio
 from aiohttp import web
+from sympy import true
 
 from game import GameController
 from templates import error
@@ -113,12 +114,19 @@ class GameNamespace(socketio.AsyncNamespace):
         if not display_name:
             display_name = user_id
 
+        log.warning('Extracted identity: %s as %s', user_id, display_name)
+
         return user_id, display_name
 
 
 class GameServer:
     def __init__(self):
-        self.socket_server = socketio.AsyncServer(async_mode='aiohttp', cors_allowed_origins='*')
+        self.socket_server = socketio.AsyncServer(
+            async_mode='aiohttp',
+            cors_allowed_origins='*',
+            logger=true,
+            engineio_logger=logging.getLogger('engineio.server'),
+        )
         self.app = web.Application()
         self.socket_server.attach(self.app)
         self.controller = GameController(self.socket_server, namespace=NAMESPACE)
