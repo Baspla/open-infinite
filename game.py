@@ -243,14 +243,15 @@ class GameController:
             return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
 
         system_prompt = (
-            "You are an expert game designer for a creative combination game inspired by 'Infinite Craft'. "
+            "You are an expert game designer for a creative combination game. "
             "Players combine elements like Air, Earth, Fire, and Water to create new elements. "
             "Each combination results in a new or existing element, or 'None' if it's impossible."
             "*** IMPORTANT ***"
             "NEVER output more than 1 element at a time."
             "Be creative but still logically correct!"
-            "Sometimes the user will combine two of the same element. In some cases the output should be a bigger version of the element. "
+            "Sometimes the user will combine two of the same element. In some cases the output should be a bigger version of the element or just the same element again."
             "For example, combining Water and Water might give us Ocean.\n"
+            "Don't just add bigger adjectives like 'Big', 'Mega' or 'Infinite' to the element name. Instead, think of a logical larger version of the element."
             "Outputting '[Element1], [Element2]' as an element is not appropriate. Please provide a creative and logically correct response."
             "Air and Fire should not be equal to Lava."
             "Air and Stone should be Sand. As the air would erode the stone."
