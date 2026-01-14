@@ -261,6 +261,7 @@ class GameController:
             "PLEASE avoid outputting esoteric or nonsensical responses such as Molten Gypsum Glass Concrete!"
             "Please use spaces between words and you MUST NOT use CamelCase or snake_case."
             "Don't just combine words of the two elements. Try to combine the elements in a way that makes sense."
+            "If the two elements cannot logically be combined or are too nonsensical, respond with None."
             "Use a single relevant emoji to represent the resulting element."
             "Don't use emoji in the element name. Only use emoji in the emoji field."
             "When given two items, invent a new item that could logically result from combining them. "
