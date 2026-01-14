@@ -4,7 +4,6 @@ from typing import Any, Dict
 
 import socketio
 from aiohttp import web
-from sympy import true
 
 from game import GameController
 from templates import error
@@ -124,7 +123,7 @@ class GameServer:
         self.socket_server = socketio.AsyncServer(
             async_mode='aiohttp',
             cors_allowed_origins='*',
-            logger=true,
+            logger=True,
             engineio_logger=logging.getLogger('engineio.server'),
         )
         self.app = web.Application()
