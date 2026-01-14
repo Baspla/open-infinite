@@ -21,21 +21,21 @@
     <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" crossorigin="anonymous"></script>
 </head>
 
-<body class="h-full m-0 font-['Roboto',_sans-serif] dark:bg-gray-900 dark:text-white">
+<body class="h-full m-0 font-['Roboto',_sans-serif] dark:bg-black dark:text-white">
     <div id="itemWorkspace" class="flex"></div>
     <div class="h-full flex overflow-hidden">
         <div class="w-full flex flex-col">
             <div id="target"
-                class="flex justify-center gap-32 text-center px-0 py-2 border-solid border-b border-b-[#a3a3a3] bg-[#fafafa] dark:bg-gray-800 dark:border-gray-700 hidden">
+                class="flex justify-center gap-32 text-center px-0 py-2 border-solid border-b border-b-[#a3a3a3] bg-[#fafafa] dark:bg-black  dark:border-[#2a2a2a] hidden">
             </div>
             <div class="grow h-full min-h-0 overflow-hidden">
                 <div class="h-full w-full relative">
-                    <canvas id="canvas" class="w-full h-full blur-2xl"></canvas>
+                    <canvas id="canvas" class="w-full h-full"></canvas>
                     <div
                         class="h-full w-full top-0 left-0 absolute flex justify-center p-3/12 pointer-events-none overflow-hidden">
                         <div class="flex flex-col justify-center">
                             <div id="popup"
-                                class="bg-white dark:bg-gray-800 dark:text-white p-4 rounded-lg shadow-lg hidden">
+                                class="bg-white dark:bg-[#0c0c0c] dark:text-[#f1f1f1] p-4 rounded-lg shadow-lg hidden">
                                 <h1 id="popup-title" class="text-center text-2xl mb-2"></h1>
                                 <p id="popup-text" class="text-justify text-lg"></p>
                             </div>
@@ -44,20 +44,20 @@
                 </div>
             </div>
             <div
-                class="flex w-full dark:bg-gray-800 border-solid border-t border-t-[#a3a3a3] bg-[#fafafa] dark:border-gray-700">
-                <div class="text-2xl shrink-0 px-2 py-1 border-solid border-r border-r-[#a3a3a3] dark:border-gray-700">
+                class="flex w-full dark:bg-black border-solid border-t border-t-[#a3a3a3] bg-[#fafafa] dark:border-[#2a2a2a]">
+                <div class="text-2xl shrink-0 px-2 py-1 border-solid border-r border-r-[#a3a3a3] dark:border-[#2a2a2a]">
                     <span id="status"></span>
                 </div>
                 <div id="username"
-                    class="text-2xl shrink-0 px-2 py-1 border-solid border-r border-r-[#a3a3a3] dark:border-gray-700 hidden">
+                    class="text-2xl shrink-0 px-2 py-1 border-solid border-r border-r-[#a3a3a3] dark:border-[#2a2a2a] hidden">
                 </div>
                 <div class="grow">
                     <marquee id="news" loop
-                        class="text-2xl px-2 py-1 border-solid border-r border-r-[#a3a3a3] dark:border-gray-700">
+                        class="text-2xl px-2 py-1 border-solid border-r border-r-[#a3a3a3] dark:border-[#2a2a2a]">
                     </marquee>
                 </div>
                 <div
-                    class="shrink-0 flex flex-col justify-center text-2xl px-2 py-1 border-solid border-l border-l-[#a3a3a3] dark:border-gray-700">
+                    class="shrink-0 flex flex-col justify-center text-2xl px-2 py-1 border-solid border-l border-l-[#a3a3a3] dark:border-[#2a2a2a]">
 
                     <div id="conn-notconnected" class="" title="Keine Verbindung">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
@@ -91,7 +91,7 @@
                         </svg>
                     </div>
                 </div>
-                <div class="shrink-0 text-2xl px-2 py-1 border-solid border-l border-l-[#a3a3a3] dark:border-gray-700">
+                <div class="shrink-0 text-2xl px-2 py-1 border-solid border-l border-l-[#a3a3a3] dark:border-[#2a2a2a]">
                     <button id="btn-clear" title="Arbeitsplatz säubern">🧹</button>
                     <button id="btn-rename" title="Nutzername ändern">📝</button>
                 </div>
@@ -99,15 +99,30 @@
         </div>
         <!-- Sidebar -->
         <div
-            class="flex flex-col w-[500px] shrink-0 h-full border-solid border-l border-l-[#a3a3a3] bg-[#f5f5f5] dark:bg-gray-800 dark:border-gray-700 overflow-hidden">
+            class="flex flex-col w-[500px] shrink-0 h-full border-solid border-l border-l-[#a3a3a3] bg-[#f5f5f5] dark:bg-black dark:border-[#2a2a2a] overflow-hidden">
             <h1 class="text-center mt-6 mb-3 text-4xl">Open-Infinite</h1>
+            <div class="px-4 mb-2">
+                <label for="item-search" class="block text-sm text-gray-600 dark:text-[#d6d6d6] mb-1">Items durchsuchen</label>
+                <input id="item-search" type="search" placeholder="Suche nach Namen oder Emoji"
+                    class="w-full rounded border border-[#a3a3a3] dark:border-[#2a2a2a] bg-white dark:bg-[#050505] px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
             <div id="item-destroybox" class="grow overflow-y-auto">
                 <div id="item-list" class="flex flex-wrap gap-3 m-4 justify-evenly"></div>
             </div>
-            <div id="player-container" class="px-4 border-t border-t-[#a3a3a3] dark:border-gray-700 hidden">
+            <div id="player-container" class="px-4 border-t border-t-[#a3a3a3] dark:border-[#2a2a2a] hidden">
                 <h2 class="text-center text-2xl my-2">Players</h2>
                 <div id="player-list" class="overflow-x-auto flex gap-4 pb-4 mb-2 snap-x">
                 </div>
+            </div>
+            <div id="bingo-container" class="px-4 border-t border-t-[#a3a3a3] dark:border-[#2a2a2a] hidden">
+                <div class="flex items-center justify-between py-2">
+                    <div>
+                        <h2 class="text-2xl leading-tight">Bingo</h2>
+                        <p id="bingo-size" class="text-sm text-gray-600 dark:text-gray-300"></p>
+                    </div>
+                    <button id="bingo-toggle" class="text-sm text-blue-600 dark:text-blue-400 hover:underline">Ausblenden</button>
+                </div>
+                <div id="bingo-board" class="grid gap-2 pb-4"></div>
             </div>
         </div>
     </div>

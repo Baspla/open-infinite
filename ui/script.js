@@ -2,6 +2,12 @@ waiting_pairs = {};
 last_pair_id = 1;
 let socket = null;
 
+function handleBingoClick(payload){
+    if(socket && socket.connected){
+        socket.emit('bingo_click', payload);
+    }
+}
+
 function getServerUrl() {
     const raw = (window.environment && window.environment.SERVER_HOST) || window.location.origin;
     if (raw.startsWith('http://') || raw.startsWith('https://')) {
@@ -84,6 +90,9 @@ function parseServerData(data){
                 }
             }
             break;
+        case "bingo":
+            setBingoField(data.data);
+            break;
         case "news":
             if(data.data !== undefined){
                 setNews(data.data);
@@ -160,7 +169,7 @@ function connectToServer(name){
 
 document.addEventListener('DOMContentLoaded', function() {
     console.log("DOMContentLoaded event");
-    initClient(getPair, () => {});
+    initClient(getPair, () => {}, handleBingoClick);
 })
 
 window.addEventListener('load', function() {

@@ -28,6 +28,10 @@ def item_list(items):
     return {'type': 'items', 'data': items}
 
 
+def bingo(field):
+    return {'type': 'bingo', 'data': field}
+
+
 def item(name, emoji):
     return {'name': name, 'emoji': emoji}
 

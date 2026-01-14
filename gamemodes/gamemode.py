@@ -1,5 +1,5 @@
 import logging
-from templates import clear, gamemode, item, item_list, news, pair_empty_result, pair_result, username
+from templates import bingo, clear, gamemode, item, item_list, news, pair_empty_result, pair_result, username
 
 log = logging.getLogger('AbstractGamemode')
 
@@ -38,9 +38,20 @@ class AbstractGamemode:
         new_item = item(result.get('name'), result.get('emoji'))
         await self._add_item_and_notify(uuid, pair_id, new_item, cached)
 
-    async def username(self, uuid, new_username):
-        log.info('%s changed username to %s', uuid, new_username)
-        await self.game_controller.change_username(uuid, new_username)
+    # --- Bingo hooks ---
+    async def handle_bingo_click(self, uuid, click_data):
+        log.debug('Bingo click ignored in %s mode', self.mode_name)
+
+    def get_bingo_field(self, uuid):
+        return None
+
+    async def send_bingo_field(self, uuid=None, field=None):
+        target_field = field if field is not None else self.get_bingo_field(uuid)
+        await self.send(bingo(target_field), uuid)
+
+    async def broadcast_bingo_field(self):
+        for player_uuid in self.game_controller.players:
+            await self.send_bingo_field(player_uuid)
 
     # --- Hooks for subclasses ---
     def get_item_pool(self, uuid):
@@ -63,6 +74,7 @@ class AbstractGamemode:
         await self.send(gamemode(self.mode_name), uuid)
         await self.send(username(self.get_player_name(uuid)), uuid)
         await self.broadcast_item_list(uuid)
+        await self.send_bingo_field(uuid)
         await self.send(news(""), uuid)
 
     async def _send_state_to_all(self):

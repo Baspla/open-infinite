@@ -66,6 +66,34 @@ class GameNamespace(socketio.AsyncNamespace):
 
         await self.controller.handle_client_pair(uuid, pair_id, pair[0], pair[1])
 
+    async def on_bingo_click(self, sid: str, data: Dict[str, Any]):
+        uuid = self.controller.sid_to_uuid.get(sid)
+        if not uuid:
+            return await self.emit('server_message', error('Not joined'), to=sid, namespace=self.namespace)
+
+        if not isinstance(data, dict):
+            return await self.emit('server_message', error('Invalid bingo payload'), to=sid, namespace=self.namespace)
+
+        index = data.get('index')
+        row = data.get('row')
+        col = data.get('col')
+        size = data.get('size')
+
+        if not all(isinstance(val, int) for val in (index, row, col, size)):
+            return await self.emit('server_message', error('Invalid bingo coordinates'), to=sid, namespace=self.namespace)
+
+        click_data = {
+            'index': index,
+            'row': row,
+            'col': col,
+            'size': size,
+            'text': data.get('text') if isinstance(data.get('text'), str) else '',
+            'done': bool(data.get('done')),
+            'done_color': data.get('done_color') if isinstance(data.get('done_color'), str) else None,
+        }
+
+        await self.controller.handle_client_bingo_click(uuid, click_data)
+
     async def on_username(self, sid: str, data: Dict[str, Any]):
         # Usernames are managed by OAuth2; ignore client-side rename attempts
         return await self.emit('server_message', error('Username managed by SSO'), to=sid, namespace=self.namespace)

@@ -89,6 +89,9 @@ class GameController:
         # Usernames are managed by SSO; ignore client requests
         return
 
+    async def handle_client_bingo_click(self, uuid: str, click_data):
+        await self.gamemode.handle_bingo_click(uuid, click_data)
+
     async def handle_client_join(self, sid: str, uuid: str, name: str):
         existing_player = self.players.get(uuid)
         if existing_player:
@@ -112,13 +115,6 @@ class GameController:
             await self.gamemode.stop()
         self.gamemode = _gamemode
         await self.gamemode.start()
-
-    async def change_username(self, uuid: str, name: str):
-        if uuid not in self.players:
-            log.warning('Player %s not found for username change', uuid)
-            return
-        self.players[uuid].name = name
-        await self.send_to_uuid(uuid, username(name))
 
     def get_player_name(self, uuid: str) -> Optional[str]:
         player = self.players.get(uuid)
