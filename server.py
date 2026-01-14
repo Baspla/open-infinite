@@ -143,6 +143,7 @@ class GameServer:
     def run(self):
         port = int(os.getenv('PORT', '8080'))
         logging.getLogger('aiohttp.web').setLevel(logging.WARNING)
+        logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
         web.run_app(self.app, port=port)
 
 

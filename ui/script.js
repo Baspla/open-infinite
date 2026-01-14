@@ -54,9 +54,6 @@ function parseServerData(data){
                 }
             }
             break;
-        case "timer":
-            // timer messages are no longer emitted
-            break;
         case "mode":
             if(data.data !== undefined){
                 setStatus(data.data);
