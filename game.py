@@ -332,8 +332,8 @@ class GameController:
             "Respond concisely with a JSON object containing 'name' (the new item's name, less than 30 characters) and 'emoji' (a single relevant emoji, not text)."
         )
         user_prompt = (
-            f"Combine '{item1}' and '{item2}' into a new item. "
-            "Return only a JSON object with 'name' (shorter than 30 characters) and 'emoji' (a single emoji)."
+            f"Combine '{item1}' and '{item2}' into a new sensible item. "
+            "Return only a JSON object with 'name' (shorter than 30 characters or None) and 'emoji' (a single emoji)."
         )
         payload = {
             "model": llm_model,
