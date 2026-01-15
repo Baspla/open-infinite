@@ -88,6 +88,18 @@ def set_gamemode(client: httpx.Client):
             if words:
                 config["words"] = words
 
+        manual_input = input("Manual mode (click to mark)? (y/n, default y): ").strip().lower()
+        if manual_input in ('n', 'no', '0', 'false'):
+            config["manual"] = False
+        else:
+            config["manual"] = True
+
+        end_input = input("End game on Bingo? (y/n, default n): ").strip().lower()
+        if end_input in ('y', 'yes', '1', 'true'):
+            config["end_on_bingo"] = True
+        else:
+            config["end_on_bingo"] = False
+
         if mode.lower() == "bingo":
             free_center = input("Free center space? (y/n, default n): ").strip().lower()
             if free_center in ('y', 'yes', '1', 'true'):

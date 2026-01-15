@@ -14,7 +14,6 @@ from gamemodes.classic import ClassicGamemode
 from gamemodes.gamemode import AbstractGamemode
 from gamemodes.shared import SharedGamemode
 from gamemodes.bingo import BingoGamemode
-from gamemodes.lockout_bingo import LockoutBingoGamemode
 from templates import username, users, news
 import random
 
@@ -52,9 +51,6 @@ class GameController:
         elif env_gamemode == 'bingo':
             log.info('Starting in Bingo Gamemode')
             self.gamemode = BingoGamemode(self)
-        elif env_gamemode == 'lockout':
-            log.info('Starting in Lockout Bingo Gamemode')
-            self.gamemode = LockoutBingoGamemode(self)
         else:
             log.info('Unknown GAME_MODE %s, falling back to Classic Gamemode', env_gamemode)
             self.gamemode = ClassicGamemode(self)
@@ -171,8 +167,6 @@ class GameController:
             new_mode = SharedGamemode(self)
         elif normalized == 'bingo':
             new_mode = BingoGamemode(self, config)
-        elif normalized == 'lockout' or normalized == 'lockout bingo':
-            new_mode = LockoutBingoGamemode(self, config)
         else:
             raise ValueError(f"Unsupported gamemode '{mode_name}'")
 
