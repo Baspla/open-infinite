@@ -90,6 +90,9 @@ function parseServerData(data){
                 }
             }
             break;
+        case "users":
+            updateUserList(data.data);
+            break;
         case "bingo":
             setBingoField(data.data);
             break;

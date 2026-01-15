@@ -4,7 +4,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 
 import httpx
 import regex
@@ -13,7 +13,10 @@ from cache import Cache
 from gamemodes.classic import ClassicGamemode
 from gamemodes.gamemode import AbstractGamemode
 from gamemodes.shared import SharedGamemode
-from templates import username
+from gamemodes.bingo import BingoGamemode
+from gamemodes.lockout_bingo import LockoutBingoGamemode
+from templates import username, users, news
+import random
 
 log = logging.getLogger('GameController')
 COMBO_CACHE_FILE = 'cache/combocache.json'
@@ -25,6 +28,7 @@ class Player:
     uuid: str
     name: str
     sid: str
+    color: Optional[str] = None
 
 
 class GameController:
@@ -35,6 +39,8 @@ class GameController:
         self.namespace = namespace
         self.players: Dict[str, Player] = {}
         self.sid_to_uuid: Dict[str, str] = {}
+        self.available_colors = ["#EF4444", "#3B82F6", "#10B981", "#F59E0B", "#8B5CF6", "#EC4899", "#14B8A6", "#84CC16"]
+        self.assigned_colors = {} # uuid -> color
 
         env_gamemode = os.getenv('GAME_MODE', 'classic').lower()
         if env_gamemode == 'classic':
@@ -43,6 +49,12 @@ class GameController:
         elif env_gamemode == 'shared':
             log.info('Starting in Shared Gamemode')
             self.gamemode = SharedGamemode(self)
+        elif env_gamemode == 'bingo':
+            log.info('Starting in Bingo Gamemode')
+            self.gamemode = BingoGamemode(self)
+        elif env_gamemode == 'lockout':
+            log.info('Starting in Lockout Bingo Gamemode')
+            self.gamemode = LockoutBingoGamemode(self)
         else:
             log.info('Unknown GAME_MODE %s, falling back to Classic Gamemode', env_gamemode)
             self.gamemode = ClassicGamemode(self)
@@ -68,7 +80,10 @@ class GameController:
     def save_cache(self):
         log.info('Saving cache')
         self.cache.save()
-    
+
+    async def broadcast(self, message: str):
+         await self.send_to_all(news(message))
+
     async def send_to_all(self, data):
         """Broadcast a message to every connected player."""
         log.debug('Broadcasting payload: %s', data)
@@ -97,24 +112,72 @@ class GameController:
         if existing_player:
             log.info('Client with uuid %s reconnected, dropping old connection', uuid)
             await self.socket_server.disconnect(existing_player.sid, namespace=self.namespace)
-        player = Player(uuid=uuid, name=name, sid=sid)
+        
+        # Assign color
+        if uuid in self.assigned_colors:
+            color = self.assigned_colors[uuid]
+        else:
+            if self.available_colors:
+                color = self.available_colors.pop(0)
+            else:
+                 color = "#{:06x}".format(random.randint(0, 0xFFFFFF))
+            self.assigned_colors[uuid] = color
+
+        player = Player(uuid=uuid, name=name, sid=sid, color=color)
         self.players[uuid] = player
         self.sid_to_uuid[sid] = uuid
         await self.gamemode.join(uuid)
+        await self.broadcast_user_list()
 
     async def handle_disconnect(self, sid: str):
         uuid = self.sid_to_uuid.pop(sid, None)
         if not uuid:
             return
         if uuid in self.players:
+            # We keep the color assigned in self.assigned_colors so if they reconnect they get same color
             del self.players[uuid]
             log.info('Client %s disconnected', uuid)
+            await self.broadcast_user_list()
+
+    async def broadcast_user_list(self):
+        user_list = [
+            {"name": p.name, "color": p.color, "uuid": p.uuid} 
+            for p in self.players.values()
+        ]
+        await self.send_to_all(users(user_list))
 
     async def set_gamemode(self, _gamemode: AbstractGamemode):
         if self.gamemode:
             await self.gamemode.stop()
         self.gamemode = _gamemode
         await self.gamemode.start()
+
+    def list_users(self):
+        return [
+            {"uuid": player.uuid, "name": player.name}
+            for player in self.players.values()
+        ]
+
+    def get_gamemode_name(self) -> Optional[str]:
+        return self.gamemode.mode_name if self.gamemode else None
+
+    async def switch_gamemode(self, mode_name: str, config: Optional[Dict[str, Any]] = None) -> str:
+        normalized = (mode_name or '').strip().lower()
+        config = config or {}
+
+        if normalized == 'classic':
+            new_mode = ClassicGamemode(self)
+        elif normalized == 'shared':
+            new_mode = SharedGamemode(self)
+        elif normalized == 'bingo':
+            new_mode = BingoGamemode(self, config)
+        elif normalized == 'lockout' or normalized == 'lockout bingo':
+            new_mode = LockoutBingoGamemode(self, config)
+        else:
+            raise ValueError(f"Unsupported gamemode '{mode_name}'")
+
+        await self.set_gamemode(new_mode)
+        return new_mode.mode_name
 
     def get_player_name(self, uuid: str) -> Optional[str]:
         player = self.players.get(uuid)

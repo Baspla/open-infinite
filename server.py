@@ -157,6 +157,7 @@ class GameServer:
         self.controller = GameController(self.socket_server, namespace=NAMESPACE)
         self.socket_server.register_namespace(GameNamespace(self.controller))
         self._setup_static_routes()
+        self._setup_admin_routes()
 
     def _setup_static_routes(self):
         # Serve frontend assets from the ui folder at the project root
@@ -172,6 +173,83 @@ class GameServer:
         self.app.router.add_get('/', index_handler)
         # Static files (JS/CSS/assets) served from root paths
         self.app.router.add_static('/', static_dir, show_index=False)
+
+    def _setup_admin_routes(self):
+        token = os.getenv('ADMIN_TOKEN')
+
+        async def _require_admin(request: web.Request):
+            if not token:
+                return None
+
+            header = request.headers.get('Authorization', '')
+            bearer = header.removeprefix('Bearer ').strip() if isinstance(header, str) else ''
+            if bearer == token:
+                return None
+            return web.json_response({'error': 'unauthorized'}, status=401)
+
+        async def admin_status(request: web.Request):
+            unauthorized = await _require_admin(request)
+            if unauthorized:
+                return unauthorized
+
+            return web.json_response({
+                'gamemode': self.controller.get_gamemode_name(),
+                'users': self.controller.list_users(),
+            })
+
+        async def admin_users(request: web.Request):
+            unauthorized = await _require_admin(request)
+            if unauthorized:
+                return unauthorized
+
+            return web.json_response({'users': self.controller.list_users()})
+
+        async def admin_gamemode(request: web.Request):
+            unauthorized = await _require_admin(request)
+            if unauthorized:
+                return unauthorized
+
+            try:
+                body = await request.json()
+            except Exception:
+                return web.json_response({'error': 'invalid json body'}, status=400)
+
+            mode = body.get('mode') if isinstance(body, dict) else None
+            config = body.get('config')
+            if not isinstance(mode, str):
+                return web.json_response({'error': 'mode must be a string'}, status=400)
+
+            try:
+                new_mode = await self.controller.switch_gamemode(mode, config)
+            except ValueError as exc:
+                return web.json_response({'error': str(exc)}, status=400)
+
+            return web.json_response({
+                'gamemode': new_mode,
+                'users': self.controller.list_users(),
+            })
+
+        async def admin_broadcast(request: web.Request):
+            unauthorized = await _require_admin(request)
+            if unauthorized:
+                return unauthorized
+
+            try:
+                body = await request.json()
+            except Exception:
+                return web.json_response({'error': 'invalid json body'}, status=400)
+
+            message = body.get('message')
+            if not isinstance(message, str) or not message.strip():
+                 return web.json_response({'error': 'message must be a non-empty string'}, status=400)
+            
+            await self.controller.broadcast(message)
+            return web.json_response({'status': 'ok'})
+
+        self.app.router.add_get('/admin/status', admin_status)
+        self.app.router.add_get('/admin/users', admin_users)
+        self.app.router.add_post('/admin/gamemode', admin_gamemode)
+        self.app.router.add_post('/admin/broadcast', admin_broadcast)
 
     def run(self):
         port = int(os.getenv('PORT', '8080'))

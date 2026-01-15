@@ -43,7 +43,7 @@ class AbstractGamemode:
         log.debug('Bingo click ignored in %s mode', self.mode_name)
 
     def get_bingo_field(self, uuid):
-        return None
+        raise NotImplementedError
 
     async def send_bingo_field(self, uuid=None, field=None):
         target_field = field if field is not None else self.get_bingo_field(uuid)

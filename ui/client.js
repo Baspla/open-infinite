@@ -114,6 +114,39 @@ function initBingoUI(){
     });
 }
 
+function updateUserList(users){
+    const container = document.getElementById('player-container');
+    const list = document.getElementById('player-list');
+    if(!container || !list){
+        return;
+    }
+
+    if(!users || !Array.isArray(users) || users.length === 0){
+        container.classList.add('hidden');
+        return;
+    }
+
+    container.classList.remove('hidden');
+    list.innerHTML = '';
+
+    users.forEach(user => {
+        const item = document.createElement('div');
+        item.className = 'flex items-center gap-2 p-2 rounded bg-white dark:bg-[#1a1a1a] border border-[#a3a3a3] dark:border-[#2a2a2a] shrink-0';
+        
+        const dot = document.createElement('div');
+        dot.className = 'w-3 h-3 rounded-full';
+        dot.style.backgroundColor = user.color || '#888';
+        
+        const name = document.createElement('span');
+        name.className = 'text-sm font-medium';
+        name.innerText = user.name || 'Unbekannt';
+        
+        item.appendChild(dot);
+        item.appendChild(name);
+        list.appendChild(item);
+    });
+}
+
 function setBingoField(field){
     if(!bingoContainer || !bingoBoard){
         return;

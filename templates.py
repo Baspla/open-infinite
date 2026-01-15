@@ -24,6 +24,10 @@ def username(_username):
     return {'type': 'username', 'data': _username}
 
 
+def users(user_list):
+    return {'type': 'users', 'data': user_list}
+
+
 def item_list(items):
     return {'type': 'items', 'data': items}
 
