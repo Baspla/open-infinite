@@ -30,10 +30,15 @@ class BingoGamemode(ClassicGamemode):
         # format: list of dicts: {'text': "Word", 'owners': set([uuid1, uuid2, ...])}
         self.shared_cells = [] 
         self.winners = set()
+        self.bingo_counts = {} # uuid -> int
         
         self.timer_active = False
         self._loop_task = None
         self._initialized = False
+
+    async def _send_state(self, uuid):
+        await self.send(timer(self.timer_seconds), uuid)
+        await super()._send_state(uuid)
 
     async def start(self):
         await super().start()
@@ -204,50 +209,91 @@ class BingoGamemode(ClassicGamemode):
             for uid in user_indices:
                 user_indices[uid] |= free_indices
 
+        # Count bingos for everyone
+        current_bingo_counts = {}
         for uid, indices in user_indices.items():
-            if uid in self.winners:
-                continue
+            current_bingo_counts[uid] = self._count_bingos(indices)
 
-            if self._has_bingo_indices(indices):
-                 self.winners.add(uid)
-                 await self.announce_winner(uid, "BINGO! 5 in einer Reihe!", stop_game=self.end_on_bingo)
-                 if self.end_on_bingo:
-                     return
+        # Check for new bingos (Mid-game)
+        if not final:
+            for uid, count in current_bingo_counts.items():
+                if count > 0:
+                    prev_count = self.bingo_counts.get(uid, 0)
+                    if count > prev_count:
+                        # New Bingo(s) found
+                        self.bingo_counts[uid] = count
+                        name = self.get_player_name(uid)
+                        
+                        if self.end_on_bingo:
+                             await self.announce_winner(uid, "BINGO! 5 in einer Reihe!")
+                             return
+                        else:
+                             await self.send(news(f"{name} hat ein BINGO! (Gesamt: {count})"))
+            return
 
-        if final:
-            max_count = 0
-            winners = []
-            for uid, indices in user_indices.items():
-                count = len(indices)
-                if count > max_count:
-                    max_count = count
-                    winners = [uid]
-                elif count == max_count:
-                    winners.append(uid)
+        # Final check (Timer ran out)
+        max_bingos = 0
+        if self.end_on_bingo:
+            # Fallback to most items logic if game ended without bingo (e.g. manual timer stop? or timer runout without bingo)
+            pass # Use standard most-items logic below
+        else:
+            # Special logic: Most Bingos, then Most Items
+            if current_bingo_counts:
+                max_bingos = max(current_bingo_counts.values())
             
-            if len(winners) == 1:
-                await self.announce_winner(winners[0], f"Meiste Items ({max_count})!", stop_game=False)
-            elif len(winners) > 1:
-                 names = [self.get_player_name(uid) for uid in winners]
-                 await self.send(news(f"Unentschieden: {', '.join(names)} ({max_count})"))
+            if max_bingos > 0:
+                bingo_winners = [uid for uid, c in current_bingo_counts.items() if c == max_bingos]
+                if len(bingo_winners) == 1:
+                    await self.announce_winner(bingo_winners[0], f"Meiste Bingos ({max_bingos})!", stop_game=False)
+                    return
+                
+                # Tie in bingos -> check items among the bingo winners
+                # Filter user_indices to only bingo_winners
+                user_indices = {uid: user_indices[uid] for uid in bingo_winners if uid in user_indices}
+                # Fall through to "most items" logic with filtered list
             else:
-                 await self.send(news("Keine Treffer!"))
+                # No bingos at all -> Fall through to "most items" logic for everyone
+                pass
 
-    def _has_bingo_indices(self, indices):
+        # Standard "Most Items" check (used for tie-breaking or no bingos)
+        max_count = 0
+        winners = []
+        for uid, indices in user_indices.items():
+            count = len(indices)
+            if count > max_count:
+                max_count = count
+                winners = [uid]
+            elif count == max_count:
+                winners.append(uid)
+        
+        if len(winners) == 1:
+            reason = f"Meiste Items ({max_count})!"
+            if not self.end_on_bingo and max_bingos > 0:
+                 reason = f"Meiste Bingos ({max_bingos}) & Items ({max_count})!"
+            await self.announce_winner(winners[0], reason, stop_game=False)
+        elif len(winners) > 1:
+             names = [self.get_player_name(uid) for uid in winners]
+             await self.send(news(f"Unentschieden: {', '.join(names)} ({max_count})"))
+
+    def _count_bingos(self, indices):
+        count = 0
         # Rows
         for i in range(self.bingo_size):
             row_indices = set(range(i*self.bingo_size, (i+1)*self.bingo_size))
-            if row_indices.issubset(indices): return True
+            if row_indices.issubset(indices): count += 1
         # Cols
         for i in range(self.bingo_size):
             col_indices = set(range(i, self.bingo_size*self.bingo_size, self.bingo_size))
-            if col_indices.issubset(indices): return True
+            if col_indices.issubset(indices): count += 1
         # Diagonals
         d1_indices = set(i*self.bingo_size + i for i in range(self.bingo_size))
-        if d1_indices.issubset(indices): return True
+        if d1_indices.issubset(indices): count += 1
         d2_indices = set(i*self.bingo_size + (self.bingo_size-1-i) for i in range(self.bingo_size))
-        if d2_indices.issubset(indices): return True
-        return False
+        if d2_indices.issubset(indices): count += 1
+        return count
+
+    def _has_bingo_indices(self, indices):
+        return self._count_bingos(indices) > 0
 
     async def announce_winner(self, uuid, reason, stop_game=True):
         name = self.get_player_name(uuid)
