@@ -40,6 +40,10 @@ def bingo(field):
     return {'type': 'bingo', 'data': field}
 
 
+def hide_bingo():
+    return {'type': 'hide_bingo'}
+
+
 def item(name, emoji):
     return {'name': name, 'emoji': emoji}
 

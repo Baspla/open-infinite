@@ -14,7 +14,8 @@ from gamemodes.classic import ClassicGamemode
 from gamemodes.gamemode import AbstractGamemode
 from gamemodes.shared import SharedGamemode
 from gamemodes.bingo import BingoGamemode
-from templates import username, users, news
+from gamemodes.shared_bingo import SharedBingoGamemode
+from templates import username, users, news, hide_bingo, clear
 import random
 
 log = logging.getLogger('GameController')
@@ -48,6 +49,9 @@ class GameController:
         elif env_gamemode == 'shared':
             log.info('Starting in Shared Gamemode')
             self.gamemode = SharedGamemode(self)
+        elif env_gamemode in ('shared_bingo', 'shared-bingo', 'sharedbingo'):
+            log.info('Starting in Shared Bingo Gamemode')
+            self.gamemode = SharedBingoGamemode(self)
         elif env_gamemode == 'bingo':
             log.info('Starting in Bingo Gamemode')
             self.gamemode = BingoGamemode(self)
@@ -77,8 +81,17 @@ class GameController:
         log.info('Saving cache')
         self.cache.save()
 
+    async def _reset_clients_for_gamemode_change(self):
+        log.info('Resetting clients before gamemode change')
+        await self.send_to_all(clear())
+        await self.send_to_all(hide_bingo())
+
     async def broadcast(self, message: str):
          await self.send_to_all(news(message))
+
+    async def finish_gamemode(self):
+        if self.gamemode:
+            await self.gamemode.finish()
 
     async def send_to_all(self, data):
         """Broadcast a message to every connected player."""
@@ -143,6 +156,7 @@ class GameController:
         await self.send_to_all(users(user_list))
 
     async def set_gamemode(self, _gamemode: AbstractGamemode):
+        await self._reset_clients_for_gamemode_change()
         if self.gamemode:
             await self.gamemode.stop()
         self.gamemode = _gamemode
@@ -165,6 +179,8 @@ class GameController:
             new_mode = ClassicGamemode(self)
         elif normalized == 'shared':
             new_mode = SharedGamemode(self)
+        elif normalized in ('shared_bingo', 'shared-bingo', 'sharedbingo'):
+            new_mode = SharedBingoGamemode(self, config)
         elif normalized == 'bingo':
             new_mode = BingoGamemode(self, config)
         else:

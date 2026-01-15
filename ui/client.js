@@ -251,6 +251,17 @@ function setBingoField(field){
     }
 }
 
+function hideBingo(){
+    if(!bingoContainer || !bingoBoard){
+        return;
+    }
+    bingoContainer.classList.add('hidden');
+    bingoBoard.innerHTML = '';
+    if(bingoSizeLabel){
+        bingoSizeLabel.innerText = '';
+    }
+}
+
 function applyItemFilter(){
     const query = (searchInput?.value || '').trim().toLowerCase();
     Object.values(item_buttons).forEach((button) => {
@@ -540,6 +551,7 @@ function _makeDraggable(item, pos_3=0, pos_4=0) {
     let pos1=0, pos2=0, pos3= pos_3, pos4= pos_4;
     let startx = 0;
     let starty = 0;
+    let hasDragged = false; // tracks whether the pointer moved during this drag
     let lastClosest = null;
     item.pairing = false;
     item.new = true;
@@ -591,6 +603,7 @@ function _makeDraggable(item, pos_3=0, pos_4=0) {
 
     function elementDrag(e) {
         e.preventDefault();
+        hasDragged = true;
         // Neue Position berechnen
         pos1 = pos3 - e.clientX;
         pos2 = pos4 - e.clientY;
@@ -629,15 +642,9 @@ function _makeDraggable(item, pos_3=0, pos_4=0) {
         // Beenden des Ziehens
         document.onmouseup = null;
         document.onmousemove = null;
-        if (Math.abs(startx) < 10 && Math.abs(starty) < 10){
-            console.log("close enough")
-            removeItem(item);
-            // Wenn das Item nicht bewegt wurde, dann wird ein neues in der Mitte des Canvas (+-20% höhe & breite) erstellt
-            canvas = document.getElementById('canvas');
-            new_x = canvas.offsetWidth / 2 + (Math.random() - 0.5) * canvas.offsetWidth * 0.2;
-            new_y = canvas.offsetHeight / 2 + (Math.random() - 0.5) * canvas.offsetHeight * 0.2;
-            createItem(item.emoji, item.name, new_x,new_y, undefined, true);
-            return;
+        if (!hasDragged) {
+            highlightWith(null);
+            return; // pure click: keep the item
         }
         // Prüfen ob das item über der Itemliste abgelegt wurde. Wenn ja, dann wird es gelöscht
         itemList = document.getElementById('item-destroybox');

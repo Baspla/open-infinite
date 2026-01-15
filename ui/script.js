@@ -96,6 +96,9 @@ function parseServerData(data){
         case "bingo":
             setBingoField(data.data);
             break;
+        case "hide_bingo":
+            hideBingo();
+            break;
         case "timer":
             setTimer(data.data);
             break;

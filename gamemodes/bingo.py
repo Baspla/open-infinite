@@ -239,6 +239,28 @@ class BingoGamemode(AbstractGamemode):
             for uid in user_indices:
                 user_indices[uid] |= free_indices
 
+        # Lockout mode: no bingo logic, decide only by most claimed fields
+        if self.lockout:
+            if not final:
+                return
+
+            max_count = 0
+            winners = []
+            for uid, indices in user_indices.items():
+                count = len(indices)
+                if count > max_count:
+                    max_count = count
+                    winners = [uid]
+                elif count == max_count:
+                    winners.append(uid)
+
+            if len(winners) == 1:
+                await self.announce_winner(winners[0], f"Meiste Felder ({max_count})!", stop_game=False)
+            elif len(winners) > 1:
+                names = [self.get_player_name(uid) for uid in winners]
+                await self.send(news(f"Unentschieden: {', '.join(names)} ({max_count})"))
+            return
+
         # Count bingos for everyone
         current_bingo_counts = {}
         for uid, indices in user_indices.items():
@@ -324,6 +346,13 @@ class BingoGamemode(AbstractGamemode):
 
     def _has_bingo_indices(self, indices):
         return self._count_bingos(indices) > 0
+
+    async def finish(self):
+        self.timer_active = False
+        if self._loop_task:
+            self._loop_task.cancel()
+        await self.check_winner(final=True)
+        await super().finish()
 
     async def announce_winner(self, uuid, reason, stop_game=True):
         name = self.get_player_name(uuid)

@@ -18,6 +18,10 @@ class AbstractGamemode:
     async def stop(self):
         log.info('%s stopped', self.mode_name)
 
+    async def finish(self):
+        log.info('%s finished (admin)', self.mode_name)
+        await self.stop()
+
     async def rejoin(self, uuid):
         log.info('%s rejoined', self.get_player_name(uuid))
         await self.join(uuid)

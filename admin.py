@@ -59,56 +59,57 @@ def list_users(client: httpx.Client):
     _print_users(data.get("users") or [])
 
 
+def _prompt_bingo_config(mode: str) -> Dict[str, Any]:
+    """Collect bingo-style config options from stdin."""
+    config: Dict[str, Any] = {}
+
+    timer_str = input("Timer seconds (default 900): ").strip()
+    if timer_str:
+        try:
+            config["timer"] = int(timer_str)
+        except ValueError:
+            print("Invalid timer, using default.")
+
+    size_str = input("Bingo size (default 5): ").strip()
+    if size_str:
+        try:
+            config["size"] = int(size_str)
+        except ValueError:
+            print("Invalid size, using default.")
+
+    words_input = input("Comma-separated words (optional, leave empty for random): ").strip()
+    if words_input:
+        words = [w.strip() for w in words_input.split(",") if w.strip()]
+        if words:
+            config["words"] = words
+
+    manual_input = input("Manual mode (click to mark)? (y/n, default y): ").strip().lower()
+    config["manual"] = not (manual_input in ('n', 'no', '0', 'false'))
+
+    end_input = input("End game on Bingo? (y/n, default n): ").strip().lower()
+    config["end_on_bingo"] = end_input in ('y', 'yes', '1', 'true')
+
+    if mode.lower() in ("bingo", "shared_bingo", "shared-bingo", "sharedbingo"):
+        free_center = input("Free center space? (y/n, default n): ").strip().lower()
+        if free_center in ('y', 'yes', '1', 'true'):
+            config["free_center"] = True
+
+        lockout = input("Lockout mode? (y/n, default n): ").strip().lower()
+        if lockout in ('y', 'yes', '1', 'true'):
+            config["lockout"] = True
+
+    return config
+
+
 def set_gamemode(client: httpx.Client):
-    mode = input("Enter gamemode (classic/shared/bingo): ").strip()
+    mode = input("Enter gamemode (classic/shared/shared_bingo/bingo): ").strip()
     if not mode:
         print("Gamemode not changed.")
         return
 
     payload: Dict[str, Any] = {"mode": mode}
-    if mode.lower() in ("bingo"):
-        config: Dict[str, Any] = {}
-        timer_str = input("Timer seconds (default 900): ").strip()
-        if timer_str:
-            try:
-                config["timer"] = int(timer_str)
-            except ValueError:
-                print("Invalid timer, using default.")
-
-        size_str = input("Bingo size (default 5): ").strip()
-        if size_str:
-            try:
-                config["size"] = int(size_str)
-            except ValueError:
-                print("Invalid size, using default.")
-
-        words_input = input("Comma-separated words (optional, leave empty for random): ").strip()
-        if words_input:
-            words = [w.strip() for w in words_input.split(",") if w.strip()]
-            if words:
-                config["words"] = words
-
-        manual_input = input("Manual mode (click to mark)? (y/n, default y): ").strip().lower()
-        if manual_input in ('n', 'no', '0', 'false'):
-            config["manual"] = False
-        else:
-            config["manual"] = True
-
-        end_input = input("End game on Bingo? (y/n, default n): ").strip().lower()
-        if end_input in ('y', 'yes', '1', 'true'):
-            config["end_on_bingo"] = True
-        else:
-            config["end_on_bingo"] = False
-
-        if mode.lower() == "bingo":
-            free_center = input("Free center space? (y/n, default n): ").strip().lower()
-            if free_center in ('y', 'yes', '1', 'true'):
-                config["free_center"] = True
-
-            lockout = input("Lockout mode? (y/n, default n): ").strip().lower()
-            if lockout in ('y', 'yes', '1', 'true'):
-                config["lockout"] = True
-
+    if mode.lower() in ("bingo", "shared_bingo", "shared-bingo", "sharedbingo"):
+        config = _prompt_bingo_config(mode)
         if config:
             payload["config"] = config
 
@@ -126,6 +127,18 @@ def send_broadcast(client: httpx.Client):
     data = _request(client, "POST", "/admin/broadcast", payload={"message": msg})
     if data and data.get("status") == "ok":
         print("Broadcast sent.")
+
+
+def finish_gamemode(client: httpx.Client):
+    confirm = input("Finish current gamemode? (y/n): ").strip().lower()
+    if confirm not in ("y", "yes", "1", "true"):
+        print("Cancelled.")
+        return
+    data = _request(client, "POST", "/admin/gamemode/finish")
+    if data and data.get("status") == "ok":
+        print("Gamemode finished.")
+    else:
+        print("Finish failed.")
 
 
 def save_cache(client: httpx.Client):
@@ -153,7 +166,8 @@ def main():
             print("3) Set gamemode")
             print("4) Save cache to disk")
             print("5) Broadcast news")
-            print("6) Quit")
+            print("6) Finish current gamemode")
+            print("7) Quit")
             choice = input(">> ").strip().lower()
 
             if choice in ("1", "status"):
@@ -166,7 +180,9 @@ def main():
                 save_cache(client)
             elif choice in ("5", "news", "announce", "broadcast"):
                 send_broadcast(client)
-            elif choice in ("6", "q", "quit", "exit"):
+            elif choice in ("6", "finish", "end", "stop"):
+                finish_gamemode(client)
+            elif choice in ("7", "q", "quit", "exit"):
                 print("Goodbye.")
                 break
             else:
