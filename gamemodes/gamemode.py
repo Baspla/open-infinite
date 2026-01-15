@@ -46,7 +46,11 @@ class AbstractGamemode:
         raise NotImplementedError
 
     async def send_bingo_field(self, uuid=None, field=None):
-        target_field = field if field is not None else self.get_bingo_field(uuid)
+        try:
+            target_field = field if field is not None else self.get_bingo_field(uuid)
+        except NotImplementedError:
+            return  # Gamemode doesn't support bingo fields
+
         await self.send(bingo(target_field), uuid)
 
     async def broadcast_bingo_field(self):
