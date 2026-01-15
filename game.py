@@ -313,6 +313,7 @@ class GameController:
             "NEVER output more than 1 element at a time."
             "Be creative but still logically correct!"
             "Sometimes the user will combine two of the same element. In some cases the output should be a bigger version of the element or just the same element again."
+            "DO NOT escalate the elements to absurd levels, for example Extreme Fire, Ultra Water, Infinite Air or Eternal Earth."
             "For example, combining Water and Water might give us Ocean.\n"
             "Don't just add bigger adjectives like 'Big', 'Mega' or 'Infinite' to the element name. Instead, think of a logical larger version of the element."
             "Outputting '[Element1], [Element2]' as an element is not appropriate. Please provide a creative and logically correct response."
