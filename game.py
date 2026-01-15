@@ -133,7 +133,7 @@ class GameController:
         uuid = self.sid_to_uuid.pop(sid, None)
         if not uuid:
             return
-        if uuid in self.players:
+        if uuid in self.players and self.players[uuid].sid == sid:
             # We keep the color assigned in self.assigned_colors so if they reconnect they get same color
             del self.players[uuid]
             log.info('Client %s disconnected', uuid)

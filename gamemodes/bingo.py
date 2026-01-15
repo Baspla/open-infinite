@@ -74,6 +74,7 @@ class BingoGamemode(ClassicGamemode):
         self._ensure_started()
         if uuid not in self.bingo_boards:
             # Generate new board for this player
+            items = self._generate_board()
             board = [{"text": item, "done": False} for item in items]
             
             if self.free_center and self.bingo_size % 2 == 1:
@@ -81,7 +82,6 @@ class BingoGamemode(ClassicGamemode):
                 board[center_idx] = {"text": "FREE", "done": True}
             
             self.bingo_boards[uuid] = board
-            self.bingo_boards[uuid] = [{"text": item, "done": False} for item in items]
         
         return {
             "size": self.bingo_size,
