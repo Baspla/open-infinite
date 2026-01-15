@@ -105,6 +105,10 @@ def set_gamemode(client: httpx.Client):
             if free_center in ('y', 'yes', '1', 'true'):
                 config["free_center"] = True
 
+            lockout = input("Lockout mode? (y/n, default n): ").strip().lower()
+            if lockout in ('y', 'yes', '1', 'true'):
+                config["lockout"] = True
+
         if config:
             payload["config"] = config
 

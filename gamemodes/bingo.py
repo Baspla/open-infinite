@@ -1,14 +1,13 @@
 import asyncio
 import logging
 import random
-from gamemodes.classic import ClassicGamemode
-from templates import bingo, news, timer
+from gamemodes.gamemode import AbstractGamemode
+from templates import bingo, news, timer, item
 
 log = logging.getLogger('BingoGamemode')
 
-class BingoGamemode(ClassicGamemode):
+class BingoGamemode(AbstractGamemode):
     def __init__(self, game_controller, config=None):
-        super().__init__(game_controller)
         config = config or {}
         
         self.lockout = config.get('lockout', False)
@@ -19,7 +18,10 @@ class BingoGamemode(ClassicGamemode):
         if self.lockout: parts.append("Lockout")
         parts.append("Bingo")
         parts.append("(Manual)" if self.manual_mode else "(Auto)")
-        self.mode_name = " ".join(parts)
+        
+        super().__init__(game_controller, " ".join(parts))
+
+        self.item_pools = {}
         
         self.bingo_size = int(config.get('size', 5))
         self.timer_seconds = int(config.get('timer', 900))
@@ -36,11 +38,25 @@ class BingoGamemode(ClassicGamemode):
         self._loop_task = None
         self._initialized = False
 
+    def _default_pool(self):
+        return [item("Water", "💧"), item("Fire", "🔥"), item("Earth", "🌍"), item("Air", "💨")]
+
+    def get_item_pool(self, uuid):
+        if uuid not in self.item_pools:
+            self.item_pools[uuid] = self._default_pool()
+        return self.item_pools[uuid]
+
+    def add_item_to_pool(self, uuid, new_item):
+        pool = self.get_item_pool(uuid)
+        if new_item not in pool:
+            pool.append(new_item)
+
     async def _send_state(self, uuid):
         await self.send(timer(self.timer_seconds), uuid)
         await super()._send_state(uuid)
 
     async def start(self):
+        self.item_pools = {}
         await super().start()
         self._ensure_initialized()
         self._ensure_started()
