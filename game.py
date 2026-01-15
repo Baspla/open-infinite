@@ -187,6 +187,10 @@ class GameController:
         log.info('Requesting combo for %s and %s', item1, item2)
         cached = self.cache.get_combo(item1, item2)
         if cached:
+            if cached.get('name') is None:
+                await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, True)
+                return
+
             if not cached.get('emoji') and isinstance(cached.get('name'), str):
                 emoji = await self.ask_llm_for_emoji(cached['name'])
                 if emoji:
@@ -399,11 +403,19 @@ class GameController:
                 return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
 
             name = result.get("name")
+            if name == "None":
+                name = None
+
             emoji = result.get("emoji")
             cached_emoji = self.cache.get_item_emoji(name) if isinstance(name, str) else None
             final_emoji = cached_emoji or emoji
 
             log.debug(f"LLM returned: name={name!r}, emoji={emoji!r}")
+
+            if name is None:
+                self.cache.add_combo(item1, item2, None, None)
+                self.save_cache()
+                return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
 
             if isinstance(name, str) and 1 <= len(name) <= 40 and isinstance(final_emoji, str) and self._is_single_emoji(final_emoji):
                 normalized_result = {"name": name, "emoji": final_emoji}

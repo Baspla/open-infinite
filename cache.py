@@ -24,11 +24,13 @@ class Cache:
 
     def get_combo(self, item1: str, item2: str):
         key = self._normalize_key(item1, item2)
-        result = self.combocache.get(key)
-        if not result:
-            return None
-        emoji = self.get_item_emoji(result)
-        return {"name": result, "emoji": emoji}
+        if key in self.combocache:
+            result = self.combocache[key]
+            if result is None:
+                return {"name": None, "emoji": None}
+            emoji = self.get_item_emoji(result)
+            return {"name": result, "emoji": emoji}
+        return None
 
     def add_combo(self, item1: str, item2: str, result_name: str, result_emoji: str):
         key = self._normalize_key(item1, item2)
