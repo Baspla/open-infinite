@@ -60,13 +60,13 @@ def list_users(client: httpx.Client):
 
 
 def set_gamemode(client: httpx.Client):
-    mode = input("Enter gamemode (classic/shared/bingo/lockout): ").strip()
+    mode = input("Enter gamemode (classic/shared/bingo): ").strip()
     if not mode:
         print("Gamemode not changed.")
         return
 
     payload: Dict[str, Any] = {"mode": mode}
-    if mode.lower() in ("bingo", "lockout", "lockout bingo"):
+    if mode.lower() in ("bingo"):
         config: Dict[str, Any] = {}
         timer_str = input("Timer seconds (default 900): ").strip()
         if timer_str:
