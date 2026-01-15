@@ -4,7 +4,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, Tuple
 
 import httpx
 import regex
@@ -186,11 +186,15 @@ class GameController:
                 await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, True)
                 return
 
-            if not cached.get('emoji') and isinstance(name, str):
-                emoji = await self.ask_llm_for_emoji(name)
-                if emoji:
-                    cached['emoji'] = emoji
-                    self.cache.set_item_emoji(name, emoji)
+            cached_emoji = self._valid_single_emoji(cached.get('emoji'))
+            cached['emoji'] = cached_emoji if cached_emoji is not None else None
+
+            if cached_emoji is None and isinstance(name, str):
+                emoji_value, persist = await self.ask_llm_for_emoji(name)
+                if emoji_value is not None:
+                    cached['emoji'] = emoji_value
+                if persist and emoji_value:
+                    self.cache.set_item_emoji(name, emoji_value)
                     self.save_cache()
             await self.gamemode.handle_combo(uuid, pair_id, item1, item2, cached, True)
         else:
@@ -201,7 +205,19 @@ class GameController:
         # Grapheme cluster check to keep single emoji outputs
         return isinstance(s, str) and regex.fullmatch(r"\X", s) is not None and len(s) <= 3
 
-    async def ask_llm_for_emoji(self, item_name: str) -> Optional[str]:
+    def _normalize_emoji_candidate(self, emoji: Optional[str]) -> Optional[str]:
+        if not isinstance(emoji, str):
+            return None
+        cleaned = emoji.strip()
+        return cleaned or None
+
+    def _valid_single_emoji(self, emoji: Optional[str]) -> Optional[str]:
+        cleaned = self._normalize_emoji_candidate(emoji)
+        if cleaned and self._is_single_emoji(cleaned):
+            return cleaned
+        return None
+
+    async def ask_llm_for_emoji(self, item_name: str) -> Tuple[Optional[str], bool]:
         log.info('Requesting emoji for %s', item_name)
         llm_url = os.getenv("LLM_API_URL") or "https://openrouter.ai/api/v1/chat/completions"
         llm_model = os.getenv("LLM_MODEL") or "openrouter/auto"
@@ -209,10 +225,10 @@ class GameController:
 
         if not llm_key:
             log.error("LLM_KEY environment variable not set")
-            return None
+            return None, False
         if not llm_url:
             log.error("LLM_API_URL environment variable not set")
-            return None
+            return None, False
 
         system_prompt = (
             "You pick a single emoji that best represents a given item name. "
@@ -243,28 +259,28 @@ class GameController:
 
             if response.status_code != 200:
                 log.error(f"Emoji LLM request failed: {response.status_code} {response.text}")
-                return None
+                return None, False
 
             try:
                 responseobj = response.json()
             except Exception as e:
                 log.error(f"Emoji response is not valid JSON: {e}, body: {response.text[:200]!r}")
-                return None
+                return None, False
 
             if not isinstance(responseobj, dict):
                 log.error(f"Unexpected emoji JSON structure: {responseobj}")
-                return None
+                return None, False
 
             choices = responseobj.get("choices")
             if not isinstance(choices, list) or not choices:
                 log.error(f"Missing or invalid 'choices' field for emoji request: {responseobj}")
-                return None
+                return None, False
 
             message = choices[0].get("message") if isinstance(choices[0], dict) else None
             llm_response = message.get("content") if isinstance(message, dict) else None
             if not isinstance(llm_response, str):
                 log.error(f"Missing or invalid emoji message content: {responseobj}")
-                return None
+                return None, False
 
             llm_response = llm_response.strip()
             if llm_response.startswith("```") and llm_response.endswith("```"):
@@ -274,22 +290,22 @@ class GameController:
                 result = json.loads(llm_response)
             except Exception as e:
                 log.error(f"Emoji message content is not valid JSON: {e}, body: {llm_response!r}")
-                return None
+                return None, False
 
             if not isinstance(result, dict):
                 log.error(f"Emoji message content is not a JSON object: {result}")
-                return None
+                return None, False
 
-            emoji = result.get("emoji")
-            if emoji and self._is_single_emoji(emoji):
+            emoji = self._valid_single_emoji(result.get("emoji"))
+            if emoji:
                 log.debug(f"Emoji LLM returned {emoji!r} for {item_name!r}")
-                return emoji
+                return emoji, True
 
             log.error(f"Emoji result malformed for {item_name!r}: {result}")
-            return None
+            return "", False
         except httpx.RequestError as e:
             log.error(f"Network error requesting emoji LLM: {e}")
-        return None
+        return None, False
 
     async def ask_llm(self, uuid, pair_id, item1, item2):
         log.info('Asking LLM for combo of %s and %s', item1, item2)
@@ -313,8 +329,8 @@ class GameController:
             "Be creative but still logically correct!"
             "Sometimes the user will combine two of the same element. In some cases the output should be a bigger version of the element or just the same element again."
             "DO NOT escalate the elements to absurd levels, for example Extreme Fire, Ultra Water, Infinite Air or Eternal Earth."
-            "For example, combining Water and Water might give us Ocean.\n"
-            "Don't just add bigger adjectives like 'Big', 'Mega' or 'Infinite' to the element name. Instead, think of a logical larger version of the element."
+            "For example, combining Water and Water might give us Ocean."
+            "Don't just add bigger adjectives like 'Big', 'Double', 'Mega' or 'Infinite' to the element name. Instead, think of a logical larger version of the element."
             "Outputting '[Element1], [Element2]' as an element is not appropriate. Please provide a creative and logically correct response."
             "Air and Fire should not be equal to Lava."
             "Air and Stone should be Sand. As the air would erode the stone."
@@ -327,7 +343,7 @@ class GameController:
             "If the two elements cannot logically be combined or are too nonsensical, respond with None."
             "Use a single relevant emoji to represent the resulting element."
             "Don't use emoji in the element name. Only use emoji in the emoji field."
-            "When given two items, invent a new item that could logically result from combining them. "
+            "When given two items, invent a new item that could logically result from combining them."
             "Respond concisely with a JSON object containing 'name' (the new item's name, less than 30 characters) and 'emoji' (a single relevant emoji, not text)."
         )
         user_prompt = (
@@ -402,25 +418,30 @@ class GameController:
             if stripped_name == "none":
                 name = None
 
-            emoji = result.get("emoji")
-            cached_emoji = self.cache.get_item_emoji(name) if isinstance(name, str) else None
-            final_emoji = cached_emoji or emoji
+            emoji_from_llm = self._valid_single_emoji(result.get("emoji"))
+            cached_emoji = self._valid_single_emoji(self.cache.get_item_emoji(name)) if isinstance(name, str) else None
+            final_emoji = cached_emoji or emoji_from_llm
 
-            log.debug(f"LLM returned: name={name!r}, emoji={emoji!r}")
+            log.debug(f"LLM returned: name={name!r}, emoji={result.get('emoji')!r}, cached_emoji={cached_emoji!r}")
 
             if name is None:
                 self.cache.add_combo(item1, item2, None, None)
                 self.save_cache()
                 return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
 
-            if isinstance(name, str) and 1 <= len(name) <= 40 and isinstance(final_emoji, str) and self._is_single_emoji(final_emoji):
-                normalized_result = {"name": name, "emoji": final_emoji}
-                self.cache.add_combo(item1, item2, name, final_emoji)
+            if isinstance(name, str) and 1 <= len(name) <= 40:
+                emoji_to_store = final_emoji
+                emoji_for_user = emoji_to_store if emoji_to_store is not None else ""
+                if emoji_from_llm is None and result.get("emoji"):
+                    log.error(f"Malformed emoji for {name!r}, storing None: {result.get('emoji')!r}")
+
+                self.cache.add_combo(item1, item2, name, emoji_to_store)
                 self.save_cache()
+                normalized_result = {"name": name, "emoji": emoji_for_user}
                 return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, normalized_result, False)
-            else:
-                log.error(f"Malformed result from LLM: {result}")
-                return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
+
+            log.error(f"Malformed result from LLM: {result}")
+            return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
 
         except httpx.RequestError as e:
             log.error(f"Network error requesting LLM: {e}")

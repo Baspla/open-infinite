@@ -23,6 +23,8 @@ class Cache:
         emoji = self.itemcache.get(name)
         if isinstance(emoji, list):
             return emoji[0] if emoji else None
+        if isinstance(emoji, str) and not emoji.strip():
+            return None
         return emoji
 
     def get_combo(self, item1: str, item2: str):
@@ -45,7 +47,7 @@ class Cache:
         self.set_item_emoji(result_name, result_emoji)
 
     def set_item_emoji(self, name: str, emoji: str):
-        if self._is_none_value(name) or emoji is None:
+        if self._is_none_value(name) or emoji is None or (isinstance(emoji, str) and not emoji.strip()):
             return
         # Overwrite missing or null emoji entries, preserve existing valid ones
         if self.itemcache.get(name) != emoji:
