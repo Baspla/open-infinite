@@ -150,14 +150,16 @@ function updateUserList(users){
 
 function setBingoField(field){
     if(!bingoContainer || !bingoBoard){
+        console.log("Bingo UI not initialized");
         return;
     }
-    if(!field || ![3,4,5].includes(field.size) || !Array.isArray(field.cells)){
+    if(!field || ![2,3,4,5].includes(field.size) || !Array.isArray(field.cells)){
         bingoContainer.classList.add('hidden');
         bingoBoard.innerHTML = '';
         if(bingoSizeLabel){
             bingoSizeLabel.innerText = '';
         }
+        console.log("Invalid bingo field data", field);
         return;
     }
 

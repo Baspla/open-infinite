@@ -185,17 +185,18 @@ class GameController:
     
     async def request_combo(self, uuid, pair_id, item1, item2):
         log.info('Requesting combo for %s and %s', item1, item2)
-        cached = self.cache.get_combo(item1, item2)
+        cached: Optional[Dict[str, Any]] = self.cache.get_combo(item1, item2)
         if cached:
-            if cached.get('name') is None:
+            name = cached.get('name')
+            if name is None:
                 await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, True)
                 return
 
-            if not cached.get('emoji') and isinstance(cached.get('name'), str):
-                emoji = await self.ask_llm_for_emoji(cached['name'])
+            if not cached.get('emoji') and isinstance(name, str):
+                emoji = await self.ask_llm_for_emoji(name)
                 if emoji:
                     cached['emoji'] = emoji
-                    self.cache.set_item_emoji(cached['name'], emoji)
+                    self.cache.set_item_emoji(name, emoji)
                     self.save_cache()
             await self.gamemode.handle_combo(uuid, pair_id, item1, item2, cached, True)
         else:
@@ -413,7 +414,7 @@ class GameController:
             log.debug(f"LLM returned: name={name!r}, emoji={emoji!r}")
 
             if name is None:
-                self.cache.add_combo(item1, item2, None, None)
+                self.cache.add_combo(item1, item2, "None", "None")
                 self.save_cache()
                 return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
 
