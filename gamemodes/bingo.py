@@ -26,7 +26,7 @@ class BingoGamemode(ClassicGamemode):
     def _ensure_started(self):
         if not self.timer_active:
             self.timer_active = True
-            if self._loop_task is None or self._loop_task.done():
+            if self.timer_seconds > 0 and (self._loop_task is None or self._loop_task.done()):
                 self._loop_task = asyncio.create_task(self.game_loop())
 
     async def game_loop(self):
