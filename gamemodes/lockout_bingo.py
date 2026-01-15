@@ -9,6 +9,8 @@ log = logging.getLogger('LockoutBingoGamemode')
 class LockoutBingoGamemode(ClassicGamemode):
     def __init__(self, game_controller, config=None):
         super().__init__(game_controller)
+        self.item_pools = {}
+        self.pool_file = None
         config = config or {}
         self.mode_name = "Lockout Bingo"
         self.bingo_size = int(config.get('size', 5))
