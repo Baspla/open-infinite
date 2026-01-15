@@ -24,7 +24,9 @@ class BingoGamemode(AbstractGamemode):
         self.item_pools = {}
         
         self.bingo_size = int(config.get('size', 5))
-        self.timer_seconds = int(config.get('timer', 900))
+        self.timer_config = int(config.get('timer', 900))
+        self.timer_seconds = self.timer_config
+        self.timer_disabled = self.timer_config <= 0
         self.custom_words = config.get('words', [])
         self.free_center = config.get('free_center', False)
         
@@ -33,6 +35,7 @@ class BingoGamemode(AbstractGamemode):
         self.shared_cells = [] 
         self.winners = set()
         self.bingo_counts = {} # uuid -> int
+        self._last_winner_news = None
         
         self.timer_active = False
         self._loop_task = None
@@ -54,6 +57,8 @@ class BingoGamemode(AbstractGamemode):
     async def _send_state(self, uuid):
         await self.send(timer(self.timer_seconds), uuid)
         await super()._send_state(uuid)
+        if self._last_winner_news:
+            await self.send(news(self._last_winner_news), uuid)
 
     async def start(self):
         self.item_pools = {}
@@ -104,6 +109,9 @@ class BingoGamemode(AbstractGamemode):
             self.timer_active = True
             if self.timer_seconds > 0 and (self._loop_task is None or self._loop_task.done()):
                 self._loop_task = asyncio.create_task(self.game_loop())
+
+    def _board_locked(self):
+        return (not self.timer_disabled) and (self.timer_seconds <= 0 or not self.timer_active)
 
     async def game_loop(self):
         while self.timer_active and self.timer_seconds > 0:
@@ -157,6 +165,9 @@ class BingoGamemode(AbstractGamemode):
         if not self.manual_mode:
             return 
 
+        if self._board_locked():
+            return
+
         self._ensure_initialized()
         self._ensure_started()
         
@@ -193,6 +204,9 @@ class BingoGamemode(AbstractGamemode):
             await self.check_bingo_progress(uuid, new_item.get('name'))
 
     async def check_bingo_progress(self, uuid, item_name):
+        if self._board_locked():
+            return
+
         changed = False
         for cell in self.shared_cells:
             if cell['text'] == item_name:
@@ -313,6 +327,8 @@ class BingoGamemode(AbstractGamemode):
 
     async def announce_winner(self, uuid, reason, stop_game=True):
         name = self.get_player_name(uuid)
-        await self.send(news(f"GEWINNER: {name} - {reason}"))
+        self.winners.add(uuid)
+        self._last_winner_news = f"GEWINNER: {name} - {reason}"
+        await self.send(news(self._last_winner_news))
         if stop_game:
             self.timer_active = False
