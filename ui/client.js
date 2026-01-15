@@ -299,6 +299,23 @@ function initCanvas(){
     let lastTimestamp = 0;
     let mousePos = null;
 
+    function getItemAnchors(){
+        const rect = canvas.getBoundingClientRect();
+        return items
+            .map((item) => {
+                const itemRect = item.getBoundingClientRect();
+                const anchor = {
+                    x: itemRect.left + itemRect.width / 2 - rect.left,
+                    y: itemRect.top + itemRect.height / 2 - rect.top,
+                };
+                const visible =
+                    anchor.x >= -linkDistance && anchor.x <= rect.width + linkDistance &&
+                    anchor.y >= -linkDistance && anchor.y <= rect.height + linkDistance;
+                return visible ? anchor : null;
+            })
+            .filter(Boolean);
+    }
+
     function isDarkMode(){
         return document.documentElement.classList.contains('dark') ||
             (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -344,6 +361,8 @@ function initCanvas(){
             y: p.y % height,
         }));
 
+        const anchors = getItemAnchors();
+
         ctx.lineWidth = 1;
         for(let i = 0; i < projected.length; i++){
             const a = projected[i];
@@ -369,6 +388,29 @@ function initCanvas(){
             ctx.fillStyle = colors.dot(particles[idx].dotOpacity);
             ctx.beginPath();
             ctx.arc(p.x, p.y, dotRadius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Connect draggable items to nearby dots
+        for(const anchor of anchors){
+            for(let idx = 0; idx < projected.length; idx++){
+                const p = projected[idx];
+                const dx = anchor.x - p.x;
+                const dy = anchor.y - p.y;
+                const dist = Math.hypot(dx, dy);
+                if(dist > linkDistance){
+                    continue;
+                }
+                const opacity = (1 - dist / linkDistance) * maxLineOpacity;
+                ctx.strokeStyle = colors.line(opacity);
+                ctx.beginPath();
+                ctx.moveTo(anchor.x, anchor.y);
+                ctx.lineTo(p.x, p.y);
+                ctx.stroke();
+            }
+            ctx.fillStyle = colors.dot(0.9);
+            ctx.beginPath();
+            ctx.arc(anchor.x, anchor.y, dotRadius, 0, Math.PI * 2);
             ctx.fill();
         }
 
