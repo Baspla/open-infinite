@@ -28,6 +28,10 @@ def users(user_list):
     return {'type': 'users', 'data': user_list}
 
 
+def timer(seconds):
+    return {'type': 'timer', 'data': seconds}
+
+
 def item_list(items):
     return {'type': 'items', 'data': items}
 

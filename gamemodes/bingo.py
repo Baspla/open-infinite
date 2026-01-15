@@ -2,7 +2,7 @@ import asyncio
 import logging
 import random
 from gamemodes.classic import ClassicGamemode
-from templates import bingo, news
+from templates import bingo, news, timer
 
 log = logging.getLogger('BingoGamemode')
 
@@ -35,7 +35,7 @@ class BingoGamemode(ClassicGamemode):
             seconds = self.timer_seconds % 60
             try:
                 if self.timer_seconds % 60 == 0 or self.timer_seconds <= 10: 
-                     await self.send(news(f"Zeit: {minutes:02d}:{seconds:02d}"))
+                     await self.send(timer(self.timer_seconds))
             except Exception as e:
                 log.error(f"Error in game loop: {e}")
             
@@ -43,6 +43,7 @@ class BingoGamemode(ClassicGamemode):
             self.timer_seconds -= 1
         
         if self.timer_active:
+            await self.send(timer(0))
             await self.send(news("Zeit abgelaufen!"))
             await self.check_winner(final=True)
             self.timer_active = False

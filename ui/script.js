@@ -96,6 +96,9 @@ function parseServerData(data){
         case "bingo":
             setBingoField(data.data);
             break;
+        case "timer":
+            setTimer(data.data);
+            break;
         case "news":
             if(data.data !== undefined){
                 setNews(data.data);

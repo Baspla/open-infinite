@@ -12,6 +12,7 @@ bingoSizeLabel = undefined;
 bingoToggle = undefined;
 bingoCollapsed = false;
 bingoClickCallback = undefined;
+timerInterval = null;
 
 function createItem(text_emoji,text_name,x,y,event=undefined,centered=false){
     const item = createItemChip(text_emoji,text_name);
@@ -197,7 +198,7 @@ function setBingoField(field){
     for(let i = 0; i < total; i++){
         const cellData = field.cells[i] || {};
         const cell = document.createElement('div');
-        cell.className = 'rounded border border-[#a3a3a3] dark:border-gray-700 bg-white dark:bg-gray-900 p-3 text-center text-base leading-tight break-words min-h-14 flex items-center justify-center';
+        cell.className = 'rounded border border-[#a3a3a3] dark:border-gray-700 bg-white dark:bg-gray-900 p-3 text-center text-base leading-tight break-all min-h-14 flex items-center justify-center';
         const doneColor = normalizeHex(cellData.done_color || (typeof cellData.done === 'string' ? cellData.done : null));
         const isDone = !!doneColor || cellData.done === true;
         if(isDone){
@@ -400,6 +401,45 @@ function setUsername(text){
 
 function setNews(text){
     document.getElementById("news").innerText = text;
+}
+
+function setTimer(seconds){
+    const elem = document.getElementById("timer");
+    if(!elem) return; // fail safe
+    
+    // Clear any previous interval
+    if(timerInterval !== null){
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
+
+    if(seconds <= 0){
+        elem.classList.add('hidden');
+        return;
+    }
+
+    elem.classList.remove('hidden');
+    
+    let currentSeconds = seconds;
+    
+    function update(){
+        if(currentSeconds < 0){
+            elem.innerText = "00:00";
+            // Optional: hide it or keep it at 00:00
+            // elem.classList.add('hidden');
+            if(timerInterval) clearInterval(timerInterval);
+            return;
+        }
+        const m = Math.floor(currentSeconds / 60);
+        const s = currentSeconds % 60;
+        const mm = m < 10 ? "0" + m : m;
+        const ss = s < 10 ? "0" + s : s;
+        elem.innerText = `${mm}:${ss}`;
+        currentSeconds--;
+    }
+    
+    update();
+    timerInterval = setInterval(update, 1000);
 }
 
 //
