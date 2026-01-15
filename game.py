@@ -398,7 +398,8 @@ class GameController:
                 return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
 
             name = result.get("name")
-            if name == "None":
+            stripped_name = name.strip().lower() if isinstance(name, str) else None
+            if stripped_name == "none":
                 name = None
 
             emoji = result.get("emoji")
@@ -408,7 +409,7 @@ class GameController:
             log.debug(f"LLM returned: name={name!r}, emoji={emoji!r}")
 
             if name is None:
-                self.cache.add_combo(item1, item2, "None", "None")
+                self.cache.add_combo(item1, item2, None, None)
                 self.save_cache()
                 return await self.gamemode.handle_combo(uuid, pair_id, item1, item2, None, False)
 

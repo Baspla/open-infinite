@@ -246,10 +246,24 @@ class GameServer:
             await self.controller.broadcast(message)
             return web.json_response({'status': 'ok'})
 
+        async def admin_save_cache(request: web.Request):
+            unauthorized = await _require_admin(request)
+            if unauthorized:
+                return unauthorized
+
+            try:
+                self.controller.save_cache()
+            except Exception:
+                log.exception('Failed to save cache on demand')
+                return web.json_response({'error': 'failed to save cache'}, status=500)
+
+            return web.json_response({'status': 'ok'})
+
         self.app.router.add_get('/admin/status', admin_status)
         self.app.router.add_get('/admin/users', admin_users)
         self.app.router.add_post('/admin/gamemode', admin_gamemode)
         self.app.router.add_post('/admin/broadcast', admin_broadcast)
+        self.app.router.add_post('/admin/cache/save', admin_save_cache)
 
     def run(self):
         port = int(os.getenv('PORT', '8080'))

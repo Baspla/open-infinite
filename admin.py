@@ -128,6 +128,14 @@ def send_broadcast(client: httpx.Client):
         print("Broadcast sent.")
 
 
+def save_cache(client: httpx.Client):
+    data = _request(client, "POST", "/admin/cache/save")
+    if data and data.get("status") == "ok":
+        print("Cache saved to disk.")
+    else:
+        print("Cache save failed.")
+
+
 def main():
     base_url = os.getenv("ADMIN_URL", DEFAULT_BASE_URL)
     token = os.getenv("ADMIN_TOKEN")
@@ -143,8 +151,9 @@ def main():
             print("1) Show status")
             print("2) List users")
             print("3) Set gamemode")
-            print("4) Broadcast news")
-            print("5) Quit")
+            print("4) Save cache to disk")
+            print("5) Broadcast news")
+            print("6) Quit")
             choice = input(">> ").strip().lower()
 
             if choice in ("1", "status"):
@@ -153,13 +162,15 @@ def main():
                 list_users(client)
             elif choice in ("3", "mode", "gamemode"):
                 set_gamemode(client)
-            elif choice in ("4", "news", "announce", "broadcast"):
+            elif choice in ("4", "cache", "save", "savecache"):
+                save_cache(client)
+            elif choice in ("5", "news", "announce", "broadcast"):
                 send_broadcast(client)
-            elif choice in ("5", "q", "quit", "exit"):
+            elif choice in ("6", "q", "quit", "exit"):
                 print("Goodbye.")
                 break
             else:
-                print("Unknown option. Use 1-5.")
+                print("Unknown option. Use 1-6.")
 
 
 if __name__ == "__main__":
