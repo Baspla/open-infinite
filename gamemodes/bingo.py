@@ -24,6 +24,7 @@ class BingoGamemode(ClassicGamemode):
         self.bingo_size = int(config.get('size', 5))
         self.timer_seconds = int(config.get('timer', 900))
         self.custom_words = config.get('words', [])
+        self.free_center = config.get('free_center', False)
         
         # Shared board state. 
         # format: list of dicts: {'text': "Word", 'owners': set([uuid1, uuid2, ...])}
@@ -54,7 +55,11 @@ class BingoGamemode(ClassicGamemode):
              return 
 
         # Generate board items
-        needed = self.bingo_size * self.bingo_size
+        total_cells = self.bingo_size * self.bingo_size
+        center_index = total_cells // 2
+        has_free_center = self.free_center and (self.bingo_size % 2 == 1)
+        needed = total_cells - 1 if has_free_center else total_cells
+
         if len(all_items) < needed:
              selection = all_items + ["?"] * (needed - len(all_items))
              random.shuffle(selection)
@@ -62,7 +67,15 @@ class BingoGamemode(ClassicGamemode):
         else:
             items = random.sample(all_items, needed)
         
-        self.shared_cells = [{"text": i, "owners": set()} for i in items]
+        self.shared_cells = []
+        item_idx = 0
+        for i in range(total_cells):
+            if has_free_center and i == center_index:
+                self.shared_cells.append({"text": "FREI", "owners": set(), "is_free": True})
+            else:
+                self.shared_cells.append({"text": items[item_idx], "owners": set()})
+                item_idx += 1
+        
         self._initialized = True
 
     def _ensure_started(self):
@@ -106,9 +119,10 @@ class BingoGamemode(ClassicGamemode):
             owners = list(cell['owners'])
             done_colors = [self._get_player_color(uid) for uid in owners]
             
+            is_free = cell.get('is_free', False)
             client_cells.append({
                 "text": cell['text'],
-                "done": uuid in cell['owners'],
+                "done": is_free or (uuid in cell['owners']),
                 "done_colors": done_colors,
                 "done_color": done_colors[0] if done_colors else None 
             })
@@ -130,13 +144,7 @@ class BingoGamemode(ClassicGamemode):
             return
             
         cell = self.shared_cells[index]
-        item_name = cell['text']
-        
-        # Verify ownership (User must have found the item)
-        pool = self.get_item_pool(uuid)
-        has_item = any(i.get('name') == item_name for i in pool)
-        
-        if not has_item:
+        if cell.get('is_free'):
             return
 
         # Toggle logic
@@ -189,6 +197,12 @@ class BingoGamemode(ClassicGamemode):
             for owner in cell['owners']:
                 if owner not in user_indices: user_indices[owner] = set()
                 user_indices[owner].add(idx)
+
+        # Include free cells for everyone
+        free_indices = {i for i, c in enumerate(self.shared_cells) if c.get('is_free')}
+        if free_indices:
+            for uid in user_indices:
+                user_indices[uid] |= free_indices
 
         for uid, indices in user_indices.items():
             if uid in self.winners:

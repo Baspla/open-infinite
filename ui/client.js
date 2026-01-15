@@ -201,18 +201,33 @@ function setBingoField(field){
         const cellData = field.cells[i] || {};
         const cell = document.createElement('div');
         cell.className = 'rounded border border-[#a3a3a3] dark:border-gray-700 bg-white dark:bg-gray-900 p-3 text-center text-base leading-tight break-all min-h-14 flex items-center justify-center';
-        const doneColor = normalizeHex(cellData.done_color || (typeof cellData.done === 'string' ? cellData.done : null));
-        const isDone = !!doneColor || cellData.done === true;
-        if(isDone){
+        
+        const validColors = (Array.isArray(cellData.done_colors) ? cellData.done_colors : [])
+            .map(normalizeHex)
+            .filter(c => c);
+
+        if (validColors.length > 0) {
             cell.classList.add('line-through');
-            if(doneColor){
-                cell.style.backgroundColor = hexToRgba(doneColor, 0.18);
-                cell.style.borderColor = doneColor;
-            }else{
-                cell.classList.add('bg-green-100');
-                cell.classList.add('dark:bg-green-900');
+            if (validColors.length === 1) {
+                const c = validColors[0];
+                cell.style.backgroundColor = hexToRgba(c, 0.25);
+                cell.style.borderColor = c;
+                cell.style.borderWidth = '2px';
+            } else {
+                const stops = validColors.map((c, idx) => {
+                    const pct = 100 / validColors.length;
+                    const start = idx * pct;
+                    const end = (idx + 1) * pct;
+                    return `${hexToRgba(c, 0.25)} ${start}%, ${hexToRgba(c, 0.25)} ${end}%`;
+                }).join(', ');
+                cell.style.background = `linear-gradient(135deg, ${stops})`;
             }
+        } else if (cellData.done) {
+            cell.classList.add('line-through');
+            cell.classList.add('bg-green-100');
+            cell.classList.add('dark:bg-green-900');
         }
+
         cell.innerText = cellData.text || '';
         if(typeof bingoClickCallback === 'function'){
             const row = Math.floor(i / field.size);
@@ -224,8 +239,6 @@ function setBingoField(field){
                     col,
                     size: field.size,
                     text: cellData.text || '',
-                    done: cellData.done || false,
-                    done_color: doneColor || null,
                 });
             });
         }
