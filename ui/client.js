@@ -25,7 +25,7 @@ function createItem(text_emoji,text_name,x,y,event=undefined,centered=false){
         item.style.top = y+ "px";
         item.style.left = x+ "px";
     items.push(item);
-    _makeDraggable(item, x, y);
+    _makeDraggable(item, x, y, event !== undefined && centered);
     if(event!==undefined){
         item.onmousedown(event);
     }
@@ -299,23 +299,6 @@ function initCanvas(){
     let lastTimestamp = 0;
     let mousePos = null;
 
-    function getItemAnchors(){
-        const rect = canvas.getBoundingClientRect();
-        return items
-            .map((item) => {
-                const itemRect = item.getBoundingClientRect();
-                const anchor = {
-                    x: itemRect.left + itemRect.width / 2 - rect.left,
-                    y: itemRect.top + itemRect.height / 2 - rect.top,
-                };
-                const visible =
-                    anchor.x >= -linkDistance && anchor.x <= rect.width + linkDistance &&
-                    anchor.y >= -linkDistance && anchor.y <= rect.height + linkDistance;
-                return visible ? anchor : null;
-            })
-            .filter(Boolean);
-    }
-
     function isDarkMode(){
         return document.documentElement.classList.contains('dark') ||
             (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -361,8 +344,6 @@ function initCanvas(){
             y: p.y % height,
         }));
 
-        const anchors = getItemAnchors();
-
         ctx.lineWidth = 1;
         for(let i = 0; i < projected.length; i++){
             const a = projected[i];
@@ -388,29 +369,6 @@ function initCanvas(){
             ctx.fillStyle = colors.dot(particles[idx].dotOpacity);
             ctx.beginPath();
             ctx.arc(p.x, p.y, dotRadius, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        // Connect draggable items to nearby dots
-        for(const anchor of anchors){
-            for(let idx = 0; idx < projected.length; idx++){
-                const p = projected[idx];
-                const dx = anchor.x - p.x;
-                const dy = anchor.y - p.y;
-                const dist = Math.hypot(dx, dy);
-                if(dist > linkDistance){
-                    continue;
-                }
-                const opacity = (1 - dist / linkDistance) * maxLineOpacity;
-                ctx.strokeStyle = colors.line(opacity);
-                ctx.beginPath();
-                ctx.moveTo(anchor.x, anchor.y);
-                ctx.lineTo(p.x, p.y);
-                ctx.stroke();
-            }
-            ctx.fillStyle = colors.dot(0.9);
-            ctx.beginPath();
-            ctx.arc(anchor.x, anchor.y, dotRadius, 0, Math.PI * 2);
             ctx.fill();
         }
 
@@ -589,12 +547,12 @@ function removeItem(elem){
 
 }
 
-function _makeDraggable(item, pos_3=0, pos_4=0) {
+function _makeDraggable(item, pos_3=0, pos_4=0, spawnRandomOnClick=false) {
     let pos1=0, pos2=0, pos3= pos_3, pos4= pos_4;
     let startx = 0;
     let starty = 0;
-    let hasDragged = false; // tracks whether the pointer moved during this drag
     let lastClosest = null;
+    let hasDragged = false;
     item.pairing = false;
     item.new = true;
     item.onmousedown = dragMouseDown;
@@ -621,6 +579,7 @@ function _makeDraggable(item, pos_3=0, pos_4=0) {
             return;
         }
         e.preventDefault();
+        hasDragged = false;
         if(e.button === 1&&!item.new){
             createItem(item.emoji, item.name, e.clientX, e.clientY, e, true);
             return;
@@ -685,8 +644,15 @@ function _makeDraggable(item, pos_3=0, pos_4=0) {
         document.onmouseup = null;
         document.onmousemove = null;
         if (!hasDragged) {
+            if (spawnRandomOnClick) {
+                removeItem(item);
+                const canvas = document.getElementById('canvas');
+                const new_x = canvas.offsetWidth / 2 + (Math.random() - 0.5) * canvas.offsetWidth * 0.2;
+                const new_y = canvas.offsetHeight / 2 + (Math.random() - 0.5) * canvas.offsetHeight * 0.2;
+                createItem(item.emoji, item.name, new_x, new_y, undefined, true);
+            }
             highlightWith(null);
-            return; // pure click: keep the item
+            return;
         }
         // Prüfen ob das item über der Itemliste abgelegt wurde. Wenn ja, dann wird es gelöscht
         itemList = document.getElementById('item-destroybox');

@@ -272,12 +272,38 @@ class GameServer:
 
             return web.json_response({'status': 'ok'})
 
+        async def admin_stopwatch(request: web.Request):
+            unauthorized = await _require_admin(request)
+            if unauthorized:
+                return unauthorized
+
+            if request.method == 'GET':
+                return web.json_response(self.controller.get_stopwatch_state())
+
+            try:
+                body = await request.json()
+            except Exception:
+                return web.json_response({'error': 'invalid json body'}, status=400)
+
+            action = str(body.get('action', '')).strip().lower()
+            if action == 'start':
+                await self.controller.start_stopwatch()
+            elif action == 'pause':
+                await self.controller.pause_stopwatch()
+            elif action == 'reset':
+                await self.controller.reset_stopwatch()
+            else:
+                return web.json_response({'error': 'unsupported action'}, status=400)
+
+            return web.json_response(self.controller.get_stopwatch_state())
+
         self.app.router.add_get('/admin/status', admin_status)
         self.app.router.add_get('/admin/users', admin_users)
         self.app.router.add_post('/admin/gamemode', admin_gamemode)
         self.app.router.add_post('/admin/broadcast', admin_broadcast)
         self.app.router.add_post('/admin/cache/save', admin_save_cache)
         self.app.router.add_post('/admin/gamemode/finish', admin_finish_gamemode)
+        self.app.router.add_route('*', '/admin/stopwatch', admin_stopwatch)
 
     def run(self):
         port = int(os.getenv('PORT', '8080'))

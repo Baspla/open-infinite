@@ -81,6 +81,7 @@ class AbstractGamemode:
         await self.send(clear(), uuid)
         await self.send(gamemode(self.mode_name), uuid)
         await self.send(username(self.get_player_name(uuid)), uuid)
+        await self.game_controller.send_stopwatch_state(uuid)
         await self.broadcast_item_list(uuid)
         await self.send_bingo_field(uuid)
         await self.send(news(""), uuid)

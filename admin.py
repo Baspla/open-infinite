@@ -129,6 +129,42 @@ def send_broadcast(client: httpx.Client):
         print("Broadcast sent.")
 
 
+def _format_seconds(seconds: Any) -> str:
+    try:
+        total = int(seconds)
+    except Exception:
+        return "00:00"
+    total = max(total, 0)
+    hours = total // 3600
+    minutes = (total % 3600) // 60
+    secs = total % 60
+    if hours:
+        return f"{hours:02}:{minutes:02}:{secs:02}"
+    return f"{minutes:02}:{secs:02}"
+
+
+def _print_stopwatch_state(state: Optional[Dict[str, Any]]):
+    if not isinstance(state, dict):
+        print("No stopwatch data available.")
+        return
+    seconds = state.get("seconds", 0)
+    running = state.get("running", False)
+    status = "running" if running else "paused"
+    print(f"Stopwatch: {_format_seconds(seconds)} ({status})")
+
+
+def control_stopwatch(client: httpx.Client):
+    action = input("Stopwatch action (start/pause/reset/status): ").strip().lower()
+    if action in ("status", "", "show"):
+        data = _request(client, "GET", "/admin/stopwatch")
+    elif action in ("start", "pause", "reset"):
+        data = _request(client, "POST", "/admin/stopwatch", payload={"action": action})
+    else:
+        print("Unknown action. Use start, pause, reset, or status.")
+        return
+    _print_stopwatch_state(data)
+
+
 def finish_gamemode(client: httpx.Client):
     confirm = input("Finish current gamemode? (y/n): ").strip().lower()
     if confirm not in ("y", "yes", "1", "true"):
@@ -167,7 +203,8 @@ def main():
             print("4) Save cache to disk")
             print("5) Broadcast news")
             print("6) Finish current gamemode")
-            print("7) Quit")
+            print("7) Stopwatch controls")
+            print("8) Quit")
             choice = input(">> ").strip().lower()
 
             if choice in ("1", "status"):
@@ -182,11 +219,13 @@ def main():
                 send_broadcast(client)
             elif choice in ("6", "finish", "end", "stop"):
                 finish_gamemode(client)
-            elif choice in ("7", "q", "quit", "exit"):
+            elif choice in ("7", "stopwatch", "clock"):
+                control_stopwatch(client)
+            elif choice in ("8", "q", "quit", "exit"):
                 print("Goodbye.")
                 break
             else:
-                print("Unknown option. Use 1-6.")
+                print("Unknown option. Use 1-8.")
 
 
 if __name__ == "__main__":
