@@ -102,6 +102,9 @@ function parseServerData(data){
         case "timer":
             setTimer(data.data);
             break;
+        case "stopwatch":
+            setStopwatch(data.data);
+            break;
         case "news":
             if(data.data !== undefined){
                 setNews(data.data);

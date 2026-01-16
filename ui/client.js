@@ -13,6 +13,7 @@ bingoToggle = undefined;
 bingoCollapsed = false;
 bingoClickCallback = undefined;
 timerInterval = null;
+stopwatchInterval = null;
 
 function createItem(text_emoji,text_name,x,y,event=undefined,centered=false){
     const item = createItemChip(text_emoji,text_name);
@@ -528,6 +529,49 @@ function setTimer(seconds){
     
     update();
     timerInterval = setInterval(update, 1000);
+}
+
+function setStopwatch(state){
+    const elem = document.getElementById('stopwatch');
+    if(!elem){
+        return;
+    }
+
+    if(stopwatchInterval !== null){
+        clearInterval(stopwatchInterval);
+        stopwatchInterval = null;
+    }
+
+    const seconds = Math.max(0, Math.floor(state?.seconds ?? 0));
+    const running = !!state?.running;
+
+    if(!state || typeof state.seconds !== 'number'){
+        elem.classList.add('hidden');
+        return;
+    }
+
+    const formatTime = (totalSeconds) => {
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const secs = totalSeconds % 60;
+        const hh = hours > 0 ? String(hours).padStart(2, '0') + ':' : '';
+        const mm = String(minutes).padStart(2, '0');
+        const ss = String(secs).padStart(2, '0');
+        return `${hh}${mm}:${ss}`;
+    };
+
+    elem.classList.remove('hidden');
+
+    const startedAt = Date.now();
+    const render = () => {
+        const elapsed = running ? Math.floor((Date.now() - startedAt) / 1000) : 0;
+        elem.innerText = formatTime(seconds + elapsed);
+    };
+
+    render();
+    if(running){
+        stopwatchInterval = setInterval(render, 1000);
+    }
 }
 
 //
