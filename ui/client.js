@@ -15,6 +15,41 @@ bingoClickCallback = undefined;
 timerInterval = null;
 stopwatchInterval = null;
 
+const THEME_STORAGE_KEY = 'theme';
+
+function getPreferredTheme(){
+    try{
+        const stored = localStorage.getItem(THEME_STORAGE_KEY);
+        if(stored === 'dark' || stored === 'light'){
+            return stored;
+        }
+    }catch(err){
+        // ignore storage errors and fall back to media query
+    }
+    if(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches){
+        return 'dark';
+    }
+    return 'light';
+}
+
+function applyTheme(theme){
+    const root = document.documentElement;
+    if(theme === 'dark'){
+        root.classList.add('dark');
+    }else{
+        root.classList.remove('dark');
+    }
+}
+
+function updateThemeToggleLabel(button, theme){
+    if(!button){
+        return;
+    }
+    const isDark = theme === 'dark';
+    button.innerText = isDark ? '🌙' : '☀️';
+    button.title = isDark ? 'Auf Hellmodus wechseln' : 'Auf Dunkelmodus wechseln';
+}
+
 function createItem(text_emoji,text_name,x,y,event=undefined,centered=false){
     const item = createItemChip(text_emoji,text_name);
     item.style.zIndex = highestZIndex++;
@@ -139,9 +174,29 @@ function clearItems(){
 
 function initButtons(){
     const clear = document.getElementById('btn-clear');
-    clear.addEventListener('click', clearItems);
+    if(clear){
+        clear.addEventListener('click', clearItems);
+    }
+    const themeToggle = document.getElementById('btn-theme');
+    const initialTheme = getPreferredTheme();
+    applyTheme(initialTheme);
+    updateThemeToggleLabel(themeToggle, initialTheme);
+    if(themeToggle){
+        themeToggle.addEventListener('click', () => {
+            const nextTheme = document.documentElement.classList.contains('dark') ? 'light' : 'dark';
+            applyTheme(nextTheme);
+            updateThemeToggleLabel(themeToggle, nextTheme);
+            try{
+                localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+            }catch(err){
+                // ignore storage errors
+            }
+        });
+    }
     const rename = document.getElementById('btn-rename');
-    rename.classList.add('hidden');
+    if(rename){
+        rename.classList.add('hidden');
+    }
 }
 
 function initSearch(){
@@ -596,10 +651,12 @@ function setStopwatch(state){
         stopwatchInterval = null;
     }
 
+    const hasSeconds = typeof state?.seconds === 'number' && state.seconds >= 0;
     const seconds = Math.max(0, Math.floor(state?.seconds ?? 0));
-    const running = !!state?.running;
+    const running = state?.running === true;
+    const paused = state?.paused === true;
 
-    if(!state || typeof state.seconds !== 'number'){
+    if(!hasSeconds || paused || !running){
         elem.classList.add('hidden');
         return;
     }

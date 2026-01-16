@@ -43,13 +43,20 @@ function parseServerData(data){
             if(data.data.id in waiting_pairs){
                 let item1 = waiting_pairs[data.data.id][0];
                 let item2 = waiting_pairs[data.data.id][1];
-                waiting_pairs[data.data.id] = undefined;
+                delete waiting_pairs[data.data.id];
                 if(data.data.new_item !== undefined && data.data.new_item != null){
                     if(data.data.new_item.emoji !== undefined&&data.data.new_item.name !== undefined){
                     console.log("pair result with new item");
-                    createItem(data.data.new_item.emoji,data.data.new_item.name,(item1.offsetLeft+item2.offsetLeft)/2,(item1.offsetTop+item2.offsetTop)/2,undefined,false);
-                    item1.remove();
-                    item2.remove();
+                    createItem(
+                        data.data.new_item.emoji,
+                        data.data.new_item.name,
+                        (item1.offsetLeft + item2.offsetLeft) / 2,
+                        (item1.offsetTop + item2.offsetTop) / 2,
+                        undefined,
+                        false
+                    );
+                    removeItem(item1);
+                    removeItem(item2);
                     }
                 }else{
                     console.log("pair result without new item");
