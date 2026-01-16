@@ -65,6 +65,11 @@ class GameController:
         atexit.register(self.save_cache)
         atexit.register(self.disconnect_all)
 
+        # Stopwatch state (admin feature; optional for clients)
+        self.stopwatch_running = False
+        self.stopwatch_seconds = 0  # accumulated seconds
+        self.stopwatch_started_at: Optional[float] = None
+
     def disconnect_all(self):
         log.info('Disconnecting all clients')
         async def _disconnect():
@@ -115,6 +120,46 @@ class GameController:
 
     async def handle_client_bingo_click(self, uuid: str, click_data):
         await self.gamemode.handle_bingo_click(uuid, click_data)
+
+    # --- Stopwatch helpers ---
+    def _current_stopwatch_seconds(self) -> int:
+        if self.stopwatch_running and self.stopwatch_started_at is not None:
+            elapsed = asyncio.get_event_loop().time() - self.stopwatch_started_at
+            return int(self.stopwatch_seconds + max(0, elapsed))
+        return int(self.stopwatch_seconds)
+
+    def get_stopwatch_state(self) -> Dict[str, Any]:
+        return {
+            "seconds": self._current_stopwatch_seconds(),
+            "running": self.stopwatch_running,
+        }
+
+    async def send_stopwatch_state(self, uuid: Optional[str] = None):
+        state = self.get_stopwatch_state()
+        payload = {"type": "stopwatch", "data": state}
+        if uuid:
+            await self.send_to_uuid(uuid, payload)
+        else:
+            await self.send_to_all(payload)
+
+    async def start_stopwatch(self):
+        if not self.stopwatch_running:
+            self.stopwatch_started_at = asyncio.get_event_loop().time()
+            self.stopwatch_running = True
+        await self.send_stopwatch_state()
+
+    async def pause_stopwatch(self):
+        if self.stopwatch_running and self.stopwatch_started_at is not None:
+            self.stopwatch_seconds = self._current_stopwatch_seconds()
+            self.stopwatch_running = False
+            self.stopwatch_started_at = None
+        await self.send_stopwatch_state()
+
+    async def reset_stopwatch(self):
+        self.stopwatch_seconds = 0
+        self.stopwatch_running = False
+        self.stopwatch_started_at = None
+        await self.send_stopwatch_state()
 
     async def handle_client_join(self, sid: str, uuid: str, name: str):
         existing_player = self.players.get(uuid)
