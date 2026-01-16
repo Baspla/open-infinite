@@ -30,6 +30,7 @@ function createItem(text_emoji,text_name,x,y,event=undefined,centered=false){
     if(event!==undefined){
         item.onmousedown(event);
     }
+    return item;
 }
 
 function createItemChip(text_emoji,text_name){
@@ -60,18 +61,57 @@ function createItemButton(text_emoji,text_name){
         if(event.button !== 0){
             return;
         }
-        const workspace = document.getElementById('canvas') || document.getElementById('itemWorkspace');
-        let targetX = event.clientX;
-        let targetY = event.clientY;
+        event.preventDefault();
 
-        if(workspace){
-            const rect = workspace.getBoundingClientRect();
-            targetX = rect.left + rect.width / 2;
-            targetY = rect.top + rect.height / 2;
+        const dragThreshold = 6;
+        const startX = event.clientX;
+        const startY = event.clientY;
+        let spawnedForDrag = false;
+
+        function cleanupListeners(){
+            document.removeEventListener('mousemove', handleMove);
+            document.removeEventListener('mouseup', handleUp);
         }
 
-        // Spawn centered in the main field instead of where the sidebar is clicked.
-        createItem(text_emoji, text_name, targetX, targetY, undefined, true);
+        function spawnAtCenter(){
+            const workspace = document.getElementById('itemWorkspace') || document.body;
+            const rect = workspace.getBoundingClientRect();
+            const jitter = 40;
+            const centerX = rect.left + rect.width / 2 + (Math.random() - 0.5) * jitter;
+            const centerY = rect.top + rect.height / 2 + (Math.random() - 0.5) * jitter;
+            createItem(text_emoji, text_name, centerX, centerY, undefined, true);
+        }
+
+        function spawnForDrag(e){
+            const rect = itemButton.getBoundingClientRect();
+            const spawnX = rect.left + rect.width / 2;
+            const spawnY = rect.top + rect.height / 2;
+            spawnedForDrag = true;
+            createItem(text_emoji, text_name, spawnX, spawnY, e, true);
+        }
+
+        function handleMove(e){
+            if(spawnedForDrag){
+                return;
+            }
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            if(Math.hypot(dx, dy) > dragThreshold){
+                spawnForDrag(e);
+                cleanupListeners();
+            }
+        }
+
+        function handleUp(){
+            cleanupListeners();
+            if(spawnedForDrag){
+                return;
+            }
+            spawnAtCenter();
+        }
+
+        document.addEventListener('mousemove', handleMove);
+        document.addEventListener('mouseup', handleUp);
     })
     item_buttons[text_name] = itemButton;
     list.appendChild(itemButton);
@@ -704,7 +744,10 @@ function _makeDraggable(item, pos_3=0, pos_4=0) {
             return;
         }
         if(e.detail === 2&&!item.new){ // Doppelklick wird bei neuen Items ignoriert um nicht unendlich viele Items zu erstellen
-            createItem(item.emoji, item.name, e.clientX, e.clientY, e, true);
+            const jitter = 12;
+            const offsetX = (Math.random() - 0.5) * jitter;
+            const offsetY = (Math.random() - 0.5) * jitter;
+            createItem(item.emoji, item.name, e.clientX + offsetX, e.clientY + offsetY, e, true);
             return;
         }
         item.new = false;
