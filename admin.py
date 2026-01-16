@@ -83,6 +83,10 @@ def _prompt_bingo_config(mode: str) -> Dict[str, Any]:
         if words:
             config["words"] = words
 
+    randomize_input = input("Disable randomization (keep word order)? (y/n, default n): ").strip().lower()
+    if randomize_input in ('y', 'yes', '1', 'true'):
+        config["randomize"] = False
+
     manual_input = input("Manual mode (click to mark)? (y/n, default y): ").strip().lower()
     config["manual"] = not (manual_input in ('n', 'no', '0', 'false'))
 
@@ -90,13 +94,13 @@ def _prompt_bingo_config(mode: str) -> Dict[str, Any]:
     config["end_on_bingo"] = end_input in ('y', 'yes', '1', 'true')
 
     if mode.lower() in ("bingo", "shared_bingo", "shared-bingo", "sharedbingo"):
-        free_center = input("Free center space? (y/n, default n): ").strip().lower()
-        if free_center in ('y', 'yes', '1', 'true'):
-            config["free_center"] = True
-
         lockout = input("Lockout mode? (y/n, default n): ").strip().lower()
         if lockout in ('y', 'yes', '1', 'true'):
             config["lockout"] = True
+        else:
+            free_center = input("Free center space? (y/n, default n): ").strip().lower()
+            if free_center in ('y', 'yes', '1', 'true'):
+                config["free_center"] = True
 
     return config
 

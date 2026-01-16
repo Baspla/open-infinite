@@ -13,6 +13,11 @@ class BingoGamemode(AbstractGamemode):
         self.lockout = config.get('lockout', False)
         self.manual_mode = config.get('manual', True)
         self.end_on_bingo = config.get('end_on_bingo', False)
+        self.randomize = config.get('randomize', True)
+        if isinstance(self.randomize, str):
+            self.randomize = self.randomize.lower() not in ('false', '0', 'no', 'off')
+        else:
+            self.randomize = bool(self.randomize)
 
         parts = []
         if self.lockout: parts.append("Lockout")
@@ -87,11 +92,15 @@ class BingoGamemode(AbstractGamemode):
         needed = total_cells - 1 if has_free_center else total_cells
 
         if len(all_items) < needed:
-             selection = all_items + ["?"] * (needed - len(all_items))
-             random.shuffle(selection)
+             selection = list(all_items) + ["?"] * (needed - len(all_items))
+             if self.randomize:
+                 random.shuffle(selection)
              items = selection[:needed]
         else:
-            items = random.sample(all_items, needed)
+            if self.randomize:
+                items = random.sample(all_items, needed)
+            else:
+                items = list(all_items)[:needed]
         
         self.shared_cells = []
         item_idx = 0
