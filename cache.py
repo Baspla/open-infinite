@@ -44,7 +44,8 @@ class Cache:
             self.combocache[key] = None
             return
         self.combocache[key] = result_name
-        self.set_item_emoji(result_name, result_emoji)
+        if result_emoji is not None and result_name is not None:
+            self.set_item_emoji(result_name, result_emoji)
 
     def set_item_emoji(self, name: str, emoji: str):
         if self._is_none_value(name) or emoji is None or (isinstance(emoji, str) and not emoji.strip()):

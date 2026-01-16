@@ -74,8 +74,8 @@ function createItemButton(text_emoji,text_name){
         }
 
         function spawnAtCenter(){
-            const workspace = document.getElementById('itemWorkspace') || document.body;
-            const rect = workspace.getBoundingClientRect();
+            const board = document.getElementById('canvas') || document.getElementById('itemWorkspace') || document.body;
+            const rect = board.getBoundingClientRect();
             const jitter = 40;
             const centerX = rect.left + rect.width / 2 + (Math.random() - 0.5) * jitter;
             const centerY = rect.top + rect.height / 2 + (Math.random() - 0.5) * jitter;
@@ -335,6 +335,8 @@ function initCanvas(){
     const baseHeight = 2160;
     const particleCount = 60;
     const linkDistance = 90;
+    const itemDotLinkDistance = linkDistance * 3;
+    const itemItemLinkDistance = linkDistance * 5;
     const maxLineOpacity = 0.45;
     const dotRadius = 2;
     const maxSpeed = 0.015; // px per ms in the virtual space
@@ -353,6 +355,7 @@ function initCanvas(){
 
     function getItemAnchors(){
         const rect = canvas.getBoundingClientRect();
+        const anchorVisibilityDistance = Math.max(itemDotLinkDistance, itemItemLinkDistance);
         return items
             .map((item) => {
                 const itemRect = item.getBoundingClientRect();
@@ -361,8 +364,8 @@ function initCanvas(){
                     y: itemRect.top + itemRect.height / 2 - rect.top,
                 };
                 const visible =
-                    anchor.x >= -linkDistance && anchor.x <= rect.width + linkDistance &&
-                    anchor.y >= -linkDistance && anchor.y <= rect.height + linkDistance;
+                    anchor.x >= -anchorVisibilityDistance && anchor.x <= rect.width + anchorVisibilityDistance &&
+                    anchor.y >= -anchorVisibilityDistance && anchor.y <= rect.height + anchorVisibilityDistance;
                 return visible ? anchor : null;
             })
             .filter(Boolean);
@@ -444,47 +447,47 @@ function initCanvas(){
         }
 
         // Connect draggable items to nearby dots
-        for(let i = 0; i < anchors.length; i++){
-            const anchor = anchors[i];
-            for(let idx = 0; idx < projected.length; idx++){
-                const p = projected[idx];
-                const dx = anchor.x - p.x;
-                const dy = anchor.y - p.y;
-                const dist = Math.hypot(dx, dy);
-                if(dist > linkDistance){
-                    continue;
+            for(let i = 0; i < anchors.length; i++){
+                const anchor = anchors[i];
+                for(let idx = 0; idx < projected.length; idx++){
+                    const p = projected[idx];
+                    const dx = anchor.x - p.x;
+                    const dy = anchor.y - p.y;
+                    const dist = Math.hypot(dx, dy);
+                    if(dist > itemDotLinkDistance){
+                        continue;
+                    }
+                    const opacity = (1 - dist / itemDotLinkDistance) * maxLineOpacity;
+                    ctx.strokeStyle = colors.line(opacity);
+                    ctx.beginPath();
+                    ctx.moveTo(anchor.x, anchor.y);
+                    ctx.lineTo(p.x, p.y);
+                    ctx.stroke();
                 }
-                const opacity = (1 - dist / linkDistance) * maxLineOpacity;
-                ctx.strokeStyle = colors.line(opacity);
+                // Connect draggable items to each other
+                for(let j = 0; j < anchors.length; j++){
+                    const other = anchors[j];
+                    if(j <= i){
+                        continue;
+                    }
+                    const dx = anchor.x - other.x;
+                    const dy = anchor.y - other.y;
+                    const dist = Math.hypot(dx, dy);
+                    if(dist > itemItemLinkDistance){
+                        continue;
+                    }
+                    const opacity = (1 - dist / itemItemLinkDistance) * maxLineOpacity;
+                    ctx.strokeStyle = colors.line(opacity);
+                    ctx.beginPath();
+                    ctx.moveTo(anchor.x, anchor.y);
+                    ctx.lineTo(other.x, other.y);
+                    ctx.stroke();
+                }
+                ctx.fillStyle = colors.dot(0.9);
                 ctx.beginPath();
-                ctx.moveTo(anchor.x, anchor.y);
-                ctx.lineTo(p.x, p.y);
-                ctx.stroke();
+                ctx.arc(anchor.x, anchor.y, dotRadius, 0, Math.PI * 2);
+                ctx.fill();
             }
-            // Connect draggable items to each other
-            for(let j = 0; j < anchors.length; j++){
-                const other = anchors[j];
-                if(j <= i){
-                    continue;
-                }
-                const dx = anchor.x - other.x;
-                const dy = anchor.y - other.y;
-                const dist = Math.hypot(dx, dy);
-                if(dist > linkDistance){
-                    continue;
-                }
-                const opacity = (1 - dist / linkDistance) * maxLineOpacity;
-                ctx.strokeStyle = colors.line(opacity);
-                ctx.beginPath();
-                ctx.moveTo(anchor.x, anchor.y);
-                ctx.lineTo(other.x, other.y);
-                ctx.stroke();
-            }
-            ctx.fillStyle = colors.dot(0.9);
-            ctx.beginPath();
-            ctx.arc(anchor.x, anchor.y, dotRadius, 0, Math.PI * 2);
-            ctx.fill();
-        }
 
         if(mousePos){
             // Connect cursor to nearby dots
