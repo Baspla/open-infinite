@@ -335,8 +335,8 @@ function initCanvas(){
     const baseHeight = 2160;
     const particleCount = 60;
     const linkDistance = 90;
-    const itemDotLinkDistance = linkDistance * 3;
-    const itemItemLinkDistance = linkDistance * 5;
+    const itemDotLinkDistance = linkDistance * 1.5;
+    const itemItemLinkDistance = linkDistance * 4;
     const maxLineOpacity = 0.45;
     const dotRadius = 2;
     const maxSpeed = 0.015; // px per ms in the virtual space
