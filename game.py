@@ -482,6 +482,11 @@ class GameController:
             if stripped_name == "none":
                 name = None
 
+            if isinstance(name, str):
+                existing_name = self.cache.find_existing_name(name)
+                if existing_name:
+                    name = existing_name
+
             emoji_from_llm = self._valid_single_emoji(result.get("emoji"))
             cached_emoji = self._valid_single_emoji(self.cache.get_item_emoji(name)) if isinstance(name, str) else None
             final_emoji = cached_emoji or emoji_from_llm

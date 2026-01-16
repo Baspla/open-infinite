@@ -19,6 +19,23 @@ class Cache:
     def _is_none_value(self, value: Optional[str]) -> bool:
         return value is None or (isinstance(value, str) and value.strip().lower() == "none")
 
+    def find_existing_name(self, name: Optional[str]) -> Optional[str]:
+        if not isinstance(name, str):
+            return None
+        target = name.strip().lower()
+        if not target:
+            return None
+
+        for existing in self.itemcache.keys():
+            if isinstance(existing, str) and existing.strip().lower() == target:
+                return existing
+
+        for existing in self.combocache.values():
+            if isinstance(existing, str) and existing.strip().lower() == target:
+                return existing
+
+        return None
+
     def get_item_emoji(self, name: str):
         emoji = self.itemcache.get(name)
         if isinstance(emoji, list):
@@ -43,6 +60,9 @@ class Cache:
         if self._is_none_value(result_name):
             self.combocache[key] = None
             return
+
+        resolved_name = self.find_existing_name(result_name) or result_name
+        result_name = resolved_name
         self.combocache[key] = result_name
         if result_emoji is not None and result_name is not None:
             self.set_item_emoji(result_name, result_emoji)
