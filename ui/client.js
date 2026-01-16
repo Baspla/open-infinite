@@ -60,7 +60,18 @@ function createItemButton(text_emoji,text_name){
         if(event.button !== 0){
             return;
         }
-        createItem(text_emoji,text_name,event.clientX,event.clientY, event, true);
+        const workspace = document.getElementById('canvas') || document.getElementById('itemWorkspace');
+        let targetX = event.clientX;
+        let targetY = event.clientY;
+
+        if(workspace){
+            const rect = workspace.getBoundingClientRect();
+            targetX = rect.left + rect.width / 2;
+            targetY = rect.top + rect.height / 2;
+        }
+
+        // Spawn centered in the main field instead of where the sidebar is clicked.
+        createItem(text_emoji, text_name, targetX, targetY, undefined, true);
     })
     item_buttons[text_name] = itemButton;
     list.appendChild(itemButton);
