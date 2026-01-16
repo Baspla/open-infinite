@@ -111,7 +111,7 @@ function createItemButton(text_emoji,text_name){
         function spawnAtCenter(){
             const board = document.getElementById('canvas') || document.getElementById('itemWorkspace') || document.body;
             const rect = board.getBoundingClientRect();
-            const jitter = 40;
+            const jitter = 100;
             const centerX = rect.left + rect.width / 2 + (Math.random() - 0.5) * jitter;
             const centerY = rect.top + rect.height / 2 + (Math.random() - 0.5) * jitter;
             createItem(text_emoji, text_name, centerX, centerY, undefined, true);
